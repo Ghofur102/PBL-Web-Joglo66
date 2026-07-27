@@ -4,7 +4,6 @@ namespace App\Services\Admin;
 
 use App\Models\Attribute;
 use App\Enums\GeneralStatus;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 class AttributeService
 {
@@ -23,44 +22,44 @@ class AttributeService
             });
         }
 
-        return $query->latest()->get();
+        return $query->get();
     }
 
-    public function checkDuplicateName(int $fieldId, string $name, ?int $ignoreId = null): void
+    public function getAttributeTypes(array $fieldIds): array
     {
-        $query = Attribute::where('fk_field_id', $fieldId)->where('name', $name);
+        $query = Attribute::query();
 
-        if ($ignoreId) {
-            $query->where('id', '!=', $ignoreId);
+        if (!empty($fieldIds)) {
+            $query->whereIn('fk_field_id', $fieldIds);
         }
 
-        if ($query->exists()) {
-            throw new UnprocessableEntityHttpException('Nama atribut sudah digunakan.');
-        }
+        return $query->distinct()->pluck('type')->filter()->values()->toArray();
     }
 
     public function createAttribute(array $data): Attribute
     {
-        $this->checkDuplicateName($data['fk_field_id'], $data['name']);
-
-        return Attribute::create(array_merge($data, [
-            'status' => GeneralStatus::ACTIVE->value
-        ]));
+        return Attribute::create([
+            'fk_field_id' => $data['fk_field_id'],
+            'name'        => $data['name'],
+            'type'        => strtolower($data['type']),
+            'stock'       => $data['stock'],
+            'price_hour'  => $data['price_hour'],
+            'status'      => GeneralStatus::ACTIVE->value,
+        ]);
     }
 
     public function updateAttribute(Attribute $attribute, array $data): Attribute
     {
-        if (isset($data['name']) && $data['name'] !== $attribute->name) {
-            $this->checkDuplicateName($attribute->fk_field_id, $data['name'], $attribute->id);
+        if (isset($data['type'])) {
+            $data['type'] = strtolower($data['type']);
         }
-
         $attribute->update($data);
         return $attribute->fresh();
     }
 
     public function toggleAttributeStatus(Attribute $attribute): Attribute
     {
-        $newStatus = $attribute->status === GeneralStatus::ACTIVE->value
+        $newStatus = ($attribute->status === GeneralStatus::ACTIVE->value)
             ? GeneralStatus::INACTIVE->value
             : GeneralStatus::ACTIVE->value;
 

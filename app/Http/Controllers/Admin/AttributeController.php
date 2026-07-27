@@ -51,6 +51,24 @@ class AttributeController extends Controller
         }
     }
 
+    public function getTypes(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $fieldIds = [];
+
+            if ($user && $user->role === 'worker') {
+                $fieldIds = $this->getAccessibleFieldIds($user);
+            }
+
+            $types = $this->attributeService->getAttributeTypes($fieldIds);
+
+            return response()->json(['success' => true, 'data' => $types], 200);
+        } catch (Throwable $e) {
+            return response()->json(['success' => false, 'message' => 'Gagal memuat jenis atribut.'], 500);
+        }
+    }
+
     public function show(Request $request, $id): JsonResponse
     {
         try {

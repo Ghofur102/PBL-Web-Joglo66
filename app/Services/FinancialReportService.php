@@ -5,11 +5,13 @@ namespace App\Services;
 use App\Models\Expense;
 use App\Models\EmployeeSalary;
 use App\Models\Payment;
+use App\Enums\PaymentStatus;
+use App\Enums\PaymentType;
 use Carbon\Carbon;
 
 class FinancialReportService
 {
-    private $formatDate = "Y-m-d H:i:s";
+    private string $formatDate = "Y-m-d H:i:s";
     private const MONTH_MAP = [
         1 => 'january', 2 => 'february', 3 => 'march', 4 => 'april',
         5 => 'may', 6 => 'june', 7 => 'july', 8 => 'august',
@@ -23,16 +25,19 @@ class FinancialReportService
         $endDate   = Carbon::create($tahun, $bulan, 1)->endOfMonth();
 
         $payments = Payment::whereBetween('paid_at', [$startDate, $endDate])
-            ->where('status', 'success')
+            ->where('status', PaymentStatus::SUCCESS->value)
+            ->with(['booking.field'])
             ->get();
 
-        $totalDP        = $payments->filter(fn($p) => strtolower(trim($p->payment_type)) === 'down payment')->sum('amount');
-        $totalPelunasan = $payments->filter(fn($p) => strtolower(trim($p->payment_type)) === 'final payment')->sum('amount');
-        $totalDPHangus  = $payments->filter(fn($p) => strtolower(trim($p->payment_type)) === 'dp hangus')->sum('amount');
-        $totalAtribut   = $payments->filter(fn($p) => in_array(strtolower(trim($p->payment_type)), ['attribute rental', 'attribute']))->sum('amount');
+        $totalDP         = $payments->filter(fn($p) => strtolower(trim($p->payment_type)) === PaymentType::DOWN_PAYMENT->value)->sum('amount');
+        $totalPelunasan  = $payments->filter(fn($p) => strtolower(trim($p->payment_type)) === PaymentType::FINAL_PAYMENT->value)->sum('amount');
+        $totalReschedule = $payments->filter(fn($p) => strtolower(trim($p->payment_type)) === PaymentType::RESCHEDULE_FEE->value)->sum('amount');
+        $totalDPHangus   = $payments->filter(fn($p) => strtolower(trim($p->payment_type)) === 'dp hangus')->sum('amount');
+        $totalAtribut    = $payments->filter(fn($p) => in_array(strtolower(trim($p->payment_type)), ['attribute rental', 'attribute']))->sum('amount');
+        $totalRefund     = $payments->filter(fn($p) => strtolower(trim($p->payment_type)) === PaymentType::REFUND->value)->sum('amount');
 
-        $totalBooking   = $totalDP + $totalPelunasan;
-        $totalPemasukan = $totalBooking + $totalAtribut + $totalDPHangus;
+        $grossIncome = $totalDP + $totalPelunasan + $totalReschedule + $totalDPHangus + $totalAtribut;
+        $netIncome   = $grossIncome - $totalRefund;
 
         $salaries = EmployeeSalary::where('period_month', $monthEnum)
             ->where('period_year', $tahun)
@@ -48,62 +53,81 @@ class FinancialReportService
         $totalOperasional = $expenses->sum('amount');
         $totalPengeluaran = $totalOperasional + $totalGaji;
 
-        $expenseBreakdown = $expenses->groupBy('category')->map(fn ($group) => [
-            'category' => $group->first()->category,
-            'amount'   => $group->sum('amount'),
-        ])->values();
+        $paymentDetails = $payments->map(function ($p) {
+            $typeStr = strtolower(trim($p->payment_type));
+            $isRefund = $typeStr === PaymentType::REFUND->value;
+            $fieldName = $p->booking->field->name ?? 'Lapangan';
 
-        $incomeDetails = $payments->filter(fn($p) => in_array(strtolower(trim($p->payment_type)), ['down payment', 'final payment', 'dp hangus']))
-            ->map(fn($p) => [
-                'id'          => 'inc_' . $p->id,
-                'date'        => Carbon::parse($p->paid_at)->format($this->formatDate),
-                'type'        => 'income',
-                'category'    => $p->payment_type,
-                'description' => 'Penyewaan Lapangan (' . ucwords(str_replace('_', ' ', $p->payment_type)) . ')',
-                'amount'      => $p->amount,
-            ]);
+            return [
+                'id'           => 'pay_' . $p->id,
+                'date'         => Carbon::parse($p->paid_at)->format($this->formatDate),
+                'type'         => $isRefund ? 'refund' : 'income',
+                'payment_type' => $p->payment_type,
+                'category'     => $p->payment_type,
+                'title'        => $isRefund ? 'Pengembalian Dana (Refund)' : 'Pembayaran ' . ucwords(str_replace('_', ' ', $p->payment_type)),
+                'description'  => 'Penyewaan Lapangan',
+                'field_name'   => $fieldName,
+                'method'       => strtoupper($p->method ?? 'CASH'),
+                'amount'       => (int)$p->amount,
+            ];
+        });
 
         $expenseDetails = $expenses->map(fn($e) => [
-            'id'          => 'exp_' . $e->id,
-            'date'        => Carbon::parse($e->expense_date)->format($this->formatDate),
-            'type'        => 'expense',
-            'category'    => $e->category,
-            'description' => 'Pengeluaran Lapangan (' . $e->category . ')',
-            'amount'      => $e->amount,
+            'id'           => 'exp_' . $e->id,
+            'date'         => Carbon::parse($e->expense_date)->format($this->formatDate),
+            'type'         => 'expense',
+            'payment_type' => 'operational_expense',
+            'category'     => $e->category,
+            'title'        => $e->name ?? ('Pengeluaran ' . $e->category),
+            'description'  => 'Pengeluaran Lapangan (' . $e->category . ')',
+            'field_name'   => 'Operasional',
+            'method'       => 'CASH',
+            'amount'       => (int)$e->amount,
         ]);
 
         $salaryDetails = $salaries->map(function($s) use ($tahun, $bulan) {
             $dateObj = $s->payment_date ? Carbon::parse($s->payment_date) : Carbon::create($tahun, $bulan, date('t', strtotime("$tahun-$bulan-01")));
             return [
-                'id'          => 'sal_' . $s->id,
-                'date'        => $dateObj->format($this->formatDate),
-                'type'        => 'expense',
-                'category'    => 'Gaji',
-                'description' => 'Pembayaran Gaji Karyawan',
-                'amount'      => $s->amount_paid + $s->bonus - $s->deduction,
+                'id'           => 'sal_' . $s->id,
+                'date'         => $dateObj->format($this->formatDate),
+                'type'         => 'expense',
+                'payment_type' => 'salary',
+                'category'     => 'Gaji',
+                'title'        => 'Pembayaran Gaji Karyawan',
+                'description'  => 'Gaji Karyawan Periode ' . $s->period_month,
+                'field_name'   => 'Gaji',
+                'method'       => 'TRANSFER',
+                'amount'       => (int)($s->amount_paid + $s->bonus - $s->deduction),
             ];
         });
 
+        $allTransactions = $paymentDetails
+            ->concat($expenseDetails)
+            ->concat($salaryDetails)
+            ->sortByDesc('date')
+            ->values()
+            ->all();
+
         return [
-            'month'              => ucfirst($monthEnum),
-            'year'               => $tahun,
-            'total_income'       => $totalPemasukan,
-            'total_expense'      => $totalPengeluaran,
-            'net_profit'         => $totalPemasukan - $totalPengeluaran,
-            'generate_at'        => now()->toDateString(),
-            'expenses'           => $expenseBreakdown,
-            'daily_transactions' => $incomeDetails->concat($expenseDetails)->concat($salaryDetails)->sortByDesc('date')->values()->all(),
-            'details'            => [
+            'summary' => [
+                'gross_income'  => (int)$grossIncome,
+                'total_refund'  => (int)$totalRefund,
+                'net_income'    => (int)$netIncome,
+                'total_expense' => (int)$totalPengeluaran,
+                'net_profit'    => (int)($netIncome - $totalPengeluaran),
+            ],
+            'transactions' => $allTransactions,
+            'details' => [
                 'income' => [
-                    'booking'              => $totalBooking,
-                    'down_payment'         => $totalDP,
-                    'final_payment'        => $totalPelunasan,
-                    'forsaken_downpayment' => $totalDPHangus,
-                    'attribute_rental'     => $totalAtribut,
+                    'down_payment'     => (int)$totalDP,
+                    'final_payment'    => (int)$totalPelunasan,
+                    'reschedule_fee'   => (int)$totalReschedule,
+                    'forsaken_dp'      => (int)$totalDPHangus,
+                    'attribute_rental' => (int)$totalAtribut,
                 ],
                 'expense' => [
-                    'operational' => $totalOperasional,
-                    'salary'      => $totalGaji,
+                    'operational' => (int)$totalOperasional,
+                    'salary'      => (int)$totalGaji,
                 ],
             ],
         ];

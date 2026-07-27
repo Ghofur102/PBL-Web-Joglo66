@@ -108,15 +108,17 @@ class BookingService
 
         $totalSessionsCount = $detail->booking->details->count();
 
-        $globalPaid = $allPayments->whereNull('fk_booking_detail_id')
-            ->where('payment_type', PaymentType::DOWN_PAYMENT->value)
-            ->sum('amount');
+        $globalPaid = $this->calculateGlobalPaidForBooking($allPayments);
 
         $allocatedGlobalDp = $totalSessionsCount > 0 ? ($globalPaid / $totalSessionsCount) : 0;
 
         $sessions = $detail->booking->details->map(function ($item) use ($allPayments, $allocatedGlobalDp) {
             $specificPaid = $allPayments->where('fk_booking_detail_id', $item->id)
-                ->whereIn('payment_type', [PaymentType::DOWN_PAYMENT->value, PaymentType::FINAL_PAYMENT->value, PaymentType::RESCHEDULE_FEE->value])
+                ->whereIn('payment_type', [
+                    PaymentType::DOWN_PAYMENT->value,
+                    PaymentType::FINAL_PAYMENT->value,
+                    PaymentType::RESCHEDULE_FEE->value
+                ])
                 ->sum('amount');
 
             $specificRefund = $allPayments->where('payment_type', PaymentType::REFUND->value)
@@ -203,19 +205,41 @@ class BookingService
     public function calculateTotalPaidForDetail($booking, $detail): float
     {
         $allPayments = $booking->payments->where('status', PaymentStatus::SUCCESS->value);
-        $totalBookingPaid = $allPayments->whereIn('payment_type', [PaymentType::DOWN_PAYMENT->value, PaymentType::FINAL_PAYMENT->value, PaymentType::RESCHEDULE_FEE->value])->sum(fn($p) => $p->amount);
+        $totalBookingPaid = $allPayments->whereIn('payment_type', [
+            PaymentType::DOWN_PAYMENT->value,
+            PaymentType::FINAL_PAYMENT->value,
+            PaymentType::RESCHEDULE_FEE->value
+        ])->sum(fn($p) => $p->amount);
+
         $totalBookingRefund = $allPayments->where('payment_type', PaymentType::REFUND->value)->sum(fn($p) => $p->amount);
         $totalDetailsCount = $booking->details->count();
 
-        if ($totalDetailsCount == 1) {
+        if ($totalDetailsCount === 1) {
             return $totalBookingPaid - $totalBookingRefund;
         }
 
-        $specificPaid = $allPayments->where('fk_booking_detail_id', $detail->id)->whereIn('payment_type', [PaymentType::DOWN_PAYMENT->value, PaymentType::FINAL_PAYMENT->value, PaymentType::RESCHEDULE_FEE->value])->sum(fn($p) => $p->amount);
+        $specificPaid = $allPayments->where('fk_booking_detail_id', $detail->id)->whereIn('payment_type', [
+            PaymentType::DOWN_PAYMENT->value,
+            PaymentType::FINAL_PAYMENT->value,
+            PaymentType::RESCHEDULE_FEE->value
+        ])->sum(fn($p) => $p->amount);
+
         $specificRefund = $allPayments->where('fk_booking_detail_id', $detail->id)->where('payment_type', PaymentType::REFUND->value)->sum(fn($p) => $p->amount);
-        $genericPaid = $allPayments->where('fk_booking_detail_id', null)->whereIn('payment_type', [PaymentType::DOWN_PAYMENT->value, PaymentType::FINAL_PAYMENT->value])->sum(fn($p) => $p->amount);
+
+        $genericPaid = $this->calculateGlobalPaidForBooking($allPayments);
 
         return ($specificPaid - $specificRefund) + ($genericPaid / $totalDetailsCount);
+    }
+
+    private function calculateGlobalPaidForBooking($allPayments): float
+    {
+        return (float) $allPayments->whereNull('fk_booking_detail_id')
+            ->whereIn('payment_type', [
+                PaymentType::DOWN_PAYMENT->value,
+                PaymentType::FINAL_PAYMENT->value,
+                PaymentType::RESCHEDULE_FEE->value
+            ])
+            ->sum(fn($p) => $p->amount);
     }
 
     private function isClosedOrCancelledStatus(string $status): bool

@@ -51,6 +51,7 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'check.field.admin'])->group
     Route::post('/payment-booking', [PaymentController::class, 'processPayment']);
 
     Route::get('/list-attribute', [AttributeController::class, 'index']);
+    Route::get('/attribute-types', [AttributeController::class, 'getTypes']);
     Route::get('/detail-attribute/{id}', [AttributeController::class, 'show']);
     Route::post('/create-attribute', [AttributeController::class, 'store']);
     Route::post('/update-attribute/{id}', [AttributeController::class, 'update']);
