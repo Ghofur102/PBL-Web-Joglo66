@@ -14,7 +14,7 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Throwable;
 
-class GajiController extends Controller
+class SalaryController extends Controller
 {
     private string $statusAccessDenied = 'Akses ditolak.';
     protected SalaryService $salaryService;

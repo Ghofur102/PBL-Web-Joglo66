@@ -10,6 +10,7 @@ use App\Http\Requests\Admin\StoreRentalRequest;
 use App\Http\Controllers\Traits\FieldAccessTrait;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -45,8 +46,9 @@ class AttributeRentalController extends Controller
             $bookings = $this->rentalService->getActiveBookings($fieldIds);
             $data = ['success' => true, 'message' => 'Data booking aktif berhasil diambil.', 'data' => $bookings];
         } catch (Throwable $e) {
+            Log::error('Active Bookings Error: ' . $e->getMessage());
             $status = 500;
-            $data = ['success' => false, 'message' => 'Gagal memuat data booking aktif.'];
+            $data = ['success' => false, 'message' => 'Gagal memuat data booking aktif: ' . $e->getMessage()];
         }
 
         return response()->json($data, $status);
@@ -60,7 +62,6 @@ class AttributeRentalController extends Controller
         try {
             $user = $request->user();
 
-            // Pengecekan Otoritas Lapangan lintas Item Atribut yang diajukan
             foreach ($request->items as $item) {
                 $attribute = Attribute::findOrFail($item['fk_attribute_id']);
                 if (!$this->checkFieldAccess($user, $attribute->fk_field_id)) {
@@ -68,14 +69,15 @@ class AttributeRentalController extends Controller
                 }
             }
 
-            $result = $this->rentalService->executeRental($request->validated(), $user);
+            $result = $this->rentalService->executeRental($request->validated());
             $data = ['success' => true, 'message' => 'Transaksi penyewaan berhasil disimpan.', 'data' => $result];
         } catch (HttpException $e) {
             $status = $e->getStatusCode();
             $data = ['success' => false, 'message' => $e->getMessage()];
         } catch (Throwable $e) {
+            Log::error('Attribute Rental Store Error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
             $status = 500;
-            $data = ['success' => false, 'message' => 'Sistem sedang sibuk. Silahkan coba lagi.', 'error' => $e->getMessage()];
+            $data = ['success' => false, 'message' => 'Gagal menyimpan transaksi penyewaan: ' . $e->getMessage()];
         }
 
         return response()->json($data, $status);
@@ -104,8 +106,9 @@ class AttributeRentalController extends Controller
             $status = $e->getStatusCode();
             $data = ['success' => false, 'message' => $e->getMessage()];
         } catch (Throwable $e) {
+            Log::error('Return Attribute Error: ' . $e->getMessage());
             $status = 500;
-            $data = ['success' => false, 'message' => 'Gagal memproses pengembalian, silahkan coba lagi.'];
+            $data = ['success' => false, 'message' => 'Gagal memproses pengembalian: ' . $e->getMessage()];
         }
 
         return response()->json($data, $status);
@@ -132,8 +135,9 @@ class AttributeRentalController extends Controller
 
             $data = ['success' => true, 'message' => 'Data riwayat penyewaan berhasil diambil.', 'data' => $historyData];
         } catch (Throwable $e) {
+            Log::error('History Attribute Error: ' . $e->getMessage());
             $status = 500;
-            $data = ['success' => false, 'message' => 'Gagal memuat data, silahkan coba lagi.', 'error' => $e->getMessage()];
+            $data = ['success' => false, 'message' => 'Gagal memuat data riwayat: ' . $e->getMessage()];
         }
 
         return response()->json($data, $status);
@@ -156,7 +160,7 @@ class AttributeRentalController extends Controller
             $data = ['success' => false, 'message' => $e->getMessage()];
         } catch (Throwable $e) {
             $status = 500;
-            $data = ['success' => false, 'message' => 'Gagal memuat data, silahkan coba lagi.'];
+            $data = ['success' => false, 'message' => 'Gagal memuat detail penyewaan: ' . $e->getMessage()];
         }
 
         return response()->json($data, $status);

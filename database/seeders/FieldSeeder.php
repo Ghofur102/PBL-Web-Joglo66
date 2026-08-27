@@ -21,7 +21,7 @@ class FieldSeeder extends Seeder
         $worker = User::where('role', 'worker')->first();
 
         if ($worker) {
-            DB::table('field_admins')->insert([
+            DB::table('field_workers')->insert([
                 'fk_user_id' => $worker->id,
                 'fk_field_id' => $field->id,
                 'created_at' => now(),

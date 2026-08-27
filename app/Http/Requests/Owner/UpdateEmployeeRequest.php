@@ -2,12 +2,9 @@
 
 namespace App\Http\Requests\Owner;
 
-use App\Enums\UserRole;
-use App\Enums\GeneralStatus;
-use App\Models\Employee;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Enum;
+use App\Models\Employee;
 
 class UpdateEmployeeRequest extends FormRequest
 {
@@ -18,26 +15,31 @@ class UpdateEmployeeRequest extends FormRequest
 
     public function rules(): array
     {
-        $isSystem = filter_var($this->is_system, FILTER_VALIDATE_BOOLEAN);
+        $isSystem = filter_var($this->input('is_system'), FILTER_VALIDATE_BOOLEAN);
         $employeeId = $this->route('id');
-
-        // Mencari ID user terkait untuk pengecualian aturan unik email
-        $userId = DB::table('employees')->where('id', $employeeId)->value('fk_user_id');
+        $employee = Employee::find($employeeId);
+        $userId = $employee?->fk_user_id;
 
         $rules = [
-            'name'         => 'required|string|max:60',
+            'name'         => 'required|string|max:100',
             'phone_number' => 'nullable|string|max:20',
             'address'      => 'nullable|string',
             'position'     => 'required|string|max:50',
-            'base_salary'  => 'required|integer|min:0',
-            'status'       => ['required', new Enum(GeneralStatus::class)],
-            'is_system'    => 'required|boolean'
+            'base_salary'  => 'required|numeric|min:0',
+            'status'       => 'nullable|string',
+            'is_system'    => 'required|boolean',
+            'role'         => 'required_if:is_system,true|string|in:worker,treasurer,owner',
+            'field_ids'    => 'nullable|array',
+            'field_ids.*'  => 'integer|exists:fields,id',
         ];
 
         if ($isSystem) {
-            $rules['email']    = 'required|email|unique:users,email,' . $userId;
-            $rules['password'] = $userId ? 'nullable|string|min:8' : 'required|string|min:8';
-            $rules['role']     = ['required', Rule::in([UserRole::WORKER->value, UserRole::TREASURER->value])];
+            $rules['email'] = [
+                'required',
+                'email',
+                Rule::unique('users', 'email')->ignore($userId),
+            ];
+            $rules['password'] = 'nullable|string|min:6';
         }
 
         return $rules;

@@ -2,131 +2,113 @@
 
 namespace App\Services\Admin;
 
-use App\Models\Field;
+use App\Models\Payment;
+use App\Models\BookingAttribute;
 use App\Models\BookingDetail;
-use App\Models\FieldPrice;
-use App\Enums\UserRole;
+use App\Enums\PaymentStatus;
+use App\Enums\PaymentType;
 use App\Enums\BookingDetailStatus;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\HttpException;
+use Illuminate\Support\Facades\Schema;
 
 class DashboardService
 {
-    private const TIME_FORMAT = 'H:i:s';
-
-    public function resolveField($user, ?int $fieldId): Field
+    public function getDashboardData(array $fieldIds): array
     {
-        $fieldQuery = Field::query();
+        $today = Carbon::today()->toDateString();
+        $startOfMonth = Carbon::now()->startOfMonth()->toDateString();
+        $endOfMonth = Carbon::now()->endOfMonth()->toDateString();
 
-        if ($user && $user->role === UserRole::WORKER->value) {
-            $fieldQuery->whereIn('id', function ($q) {
-                /** @var \Illuminate\Database\Query\Builder $q */
-                $q->select('fk_field_id')
-                  ->from('field_admins')
-                  ->where('fk_user_id', auth()->id());
+        $paymentDateCol = Schema::hasColumn('payments', 'paid_at') ? 'paid_at' : 'created_at';
+        $attributeDateCol = Schema::hasColumn('booking_attributes', 'transaction_date') ? 'transaction_date' : 'created_at';
+
+        $todayPaymentQuery = Payment::query()
+            ->where('status', PaymentStatus::SUCCESS->value)
+            ->whereDate($paymentDateCol, $today);
+
+        if (!empty($fieldIds)) {
+            $todayPaymentQuery->whereHas('booking', function ($q) use ($fieldIds) {
+                $q->whereIn('fk_field_id', $fieldIds);
             });
         }
 
-        if ($fieldId) {
-            $field = $fieldQuery->where('id', $fieldId)->first();
-            if (!$field) {
-                throw new HttpException(403, 'Anda tidak memiliki hak akses ke lapangan ini atau lapangan tidak ditemukan.');
-            }
-        } else {
-            $field = $fieldQuery->first();
-            if (!$field) {
-                throw new HttpException(404, 'Anda belum ditugaskan ke lapangan manapun. Hubungi Admin.');
-            }
+        $todayPayments = $todayPaymentQuery->get();
+        $todayBookingIncome = $todayPayments->whereIn('payment_type', [
+            PaymentType::DOWN_PAYMENT->value,
+            PaymentType::FINAL_PAYMENT->value,
+            PaymentType::RESCHEDULE_FEE->value,
+        ])->sum('amount') - $todayPayments->where('payment_type', PaymentType::REFUND->value)->sum('amount');
+
+        $todayAttributeQuery = BookingAttribute::query()
+            ->whereDate($attributeDateCol, $today)
+            ->whereNotIn('status', ['cancelled', 'batal', 'rejected']);
+
+        if (!empty($fieldIds)) {
+            $todayAttributeQuery->whereHas('attribute', function ($q) use ($fieldIds) {
+                $q->whereIn('fk_field_id', $fieldIds);
+            });
         }
 
-        return $field;
-    }
+        $todayAttributeIncome = $todayAttributeQuery->sum('total');
+        $todayIncome = $todayBookingIncome + $todayAttributeIncome;
 
-    public function getDashboardMetrics(Field $field): array
-    {
-        $today = Carbon::now()->format('Y-m-d');
-        $currentTime = Carbon::now()->format(self::TIME_FORMAT);
-        $dayType = strtolower(Carbon::now()->englishDayOfWeek);
+        $monthlyPaymentQuery = Payment::query()
+            ->where('status', PaymentStatus::SUCCESS->value)
+            ->whereBetween($paymentDateCol, [$startOfMonth . ' 00:00:00', $endOfMonth . ' 23:59:59']);
 
-        $fieldPrices = FieldPrice::query()
-            ->where('fk_field_id', $field->id)
-            ->where('day_type', $dayType)
-            ->get();
+        if (!empty($fieldIds)) {
+            $monthlyPaymentQuery->whereHas('booking', function ($q) use ($fieldIds) {
+                $q->whereIn('fk_field_id', $fieldIds);
+            });
+        }
 
-        $allSlots = $this->generateAllSlots($fieldPrices);
-        $totalSlot = count($allSlots);
+        $monthlyPayments = $monthlyPaymentQuery->get();
+        $monthlyBookingIncome = $monthlyPayments->whereIn('payment_type', [
+            PaymentType::DOWN_PAYMENT->value,
+            PaymentType::FINAL_PAYMENT->value,
+            PaymentType::RESCHEDULE_FEE->value,
+        ])->sum('amount') - $monthlyPayments->where('payment_type', PaymentType::REFUND->value)->sum('amount');
 
-        $validDetails = BookingDetail::query()
-            ->whereHas('booking', function ($query) use ($field) {
-                /** @var \Illuminate\Database\Eloquent\Builder $query */
-                $query->where('fk_field_id', $field->id);
-            })
+        $monthlyAttributeQuery = BookingAttribute::query()
+            ->whereBetween($attributeDateCol, [$startOfMonth, $endOfMonth])
+            ->whereNotIn('status', ['cancelled', 'batal', 'rejected']);
+
+        if (!empty($fieldIds)) {
+            $monthlyAttributeQuery->whereHas('attribute', function ($q) use ($fieldIds) {
+                $q->whereIn('fk_field_id', $fieldIds);
+            });
+        }
+
+        $monthlyAttributeIncome = $monthlyAttributeQuery->sum('total');
+        $monthlyIncome = $monthlyBookingIncome + $monthlyAttributeIncome;
+
+        $todayScheduleQuery = BookingDetail::query()
+            ->with(['booking.user', 'booking.field'])
             ->whereDate('play_date', $today)
-            ->whereNotIn('status', [BookingDetailStatus::CANCELLED->value, BookingDetailStatus::FIELD_CLOSURE->value])
-            ->get(['start_play_time', 'end_play_time', 'fk_booking_id']);
+            ->whereNotIn('status', [BookingDetailStatus::CANCELLED->value, BookingDetailStatus::CLOSED_FIELD_CANCELLED->value]);
 
-        $bookedSlots = $this->generateBookedSlots($validDetails);
-        $slotTerisi = count($bookedSlots);
+        if (!empty($fieldIds)) {
+            $todayScheduleQuery->whereHas('booking', function ($q) use ($fieldIds) {
+                $q->whereIn('fk_field_id', $fieldIds);
+            });
+        }
 
-        $slotKosong = $totalSlot === 0 ? 0 : $this->calculateFreeSlots($allSlots, $bookedSlots, $currentTime);
-        $totalBooking = collect($validDetails)->pluck('fk_booking_id')->unique()->count();
+        $schedulesList = $todayScheduleQuery->get()->map(function ($detail) {
+            return [
+                'id'         => $detail->id,
+                'team_name'  => $detail->booking->team_name ?? 'Tim',
+                'field_name' => $detail->booking->field->name ?? 'Lapangan',
+                'play_date'  => $detail->play_date,
+                'start_time' => Carbon::parse($detail->start_play_time)->format('H:i'),
+                'end_time'   => Carbon::parse($detail->end_play_time)->format('H:i'),
+            ];
+        })->toArray();
 
         return [
-            'name'         => $field->name ?? 'Joglo66',
-            'slotTerisi'   => $slotTerisi,
-            'totalSlot'    => $totalSlot,
-            'slotKosong'   => $slotKosong,
-            'totalBooking' => $totalBooking,
+            'today_income'    => (int) max(0, $todayIncome),
+            'monthly_income'  => (int) max(0, $monthlyIncome),
+            'today_schedules' => count($schedulesList),
+            'schedules'       => $schedulesList,
         ];
-    }
-
-    private function generateAllSlots($fieldPrices): array
-    {
-        $allSlots = [];
-        foreach ($fieldPrices as $price) {
-            /** @var FieldPrice $price */ // Menghentikan warning unknown properties di IDE
-            $start = Carbon::parse($price->start_time);
-            $end = Carbon::parse($price->end_time);
-
-            while ($start < $end) {
-                $allSlots[] = $start->format(self::TIME_FORMAT);
-                $start->addHour();
-            }
-        }
-        return $allSlots;
-    }
-
-    private function generateBookedSlots($validDetails): array
-    {
-        $bookedSlots = [];
-        foreach ($validDetails as $detail) {
-            /** @var BookingDetail $detail */ // Menghentikan warning unknown properties di IDE
-            $start = Carbon::parse($detail->start_play_time);
-            $end = Carbon::parse($detail->end_play_time);
-
-            while ($start < $end) {
-                $slotTime = $start->format(self::TIME_FORMAT);
-                if (!in_array($slotTime, $bookedSlots, true)) {
-                    $bookedSlots[] = $slotTime;
-                }
-                $start->addHour();
-            }
-        }
-        return $bookedSlots;
-    }
-
-    private function calculateFreeSlots(array $allSlots, array $bookedSlots, string $currentTime): int
-    {
-        $slotKosong = 0;
-        foreach ($allSlots as $slot) {
-            $isBooked = in_array($slot, $bookedSlots, true);
-            $isPassed = $slot < $currentTime;
-
-            if (!$isBooked && !$isPassed) {
-                $slotKosong++;
-            }
-        }
-        return $slotKosong;
     }
 }

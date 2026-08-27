@@ -9,7 +9,7 @@ use Laravel\Sanctum\PersonalAccessToken;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
-class UnduhLaporanService
+class DownloadReportService
 {
     protected FinancialReportService $financialReportService;
 

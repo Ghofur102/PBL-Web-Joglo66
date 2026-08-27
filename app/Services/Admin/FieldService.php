@@ -238,7 +238,7 @@ class FieldService
         foreach ($rules as $rule) {
             FieldPrice::create([
                 'fk_field_id' => $field->id,
-                'day_type'    => $rule['day_type'],
+                'day_type'    => strtolower($rule['day_type']),
                 'start_time'  => $rule['start_time'],
                 'end_time'    => $rule['end_time'],
                 'price'       => $rule['price'],
@@ -248,14 +248,17 @@ class FieldService
 
     private function hasPricingOverlaps(array $rules): bool
     {
-        $groupedByDay = collect($rules)->groupBy('day_type');
+        $groupedByDay = collect($rules)->groupBy(fn($r) => strtolower($r['day_type']));
 
         foreach ($groupedByDay as $dayRules) {
             $sortedRules = collect($dayRules)->sortBy('start_time')->values()->all();
             $count = count($sortedRules);
 
             for ($i = 0; $i < $count - 1; $i++) {
-                if ($sortedRules[$i]['end_time'] > $sortedRules[$i + 1]['start_time']) {
+                $currentEnd = $sortedRules[$i]['end_time'];
+                $nextStart = $sortedRules[$i + 1]['start_time'];
+
+                if ($currentEnd > $nextStart) {
                     return true;
                 }
             }

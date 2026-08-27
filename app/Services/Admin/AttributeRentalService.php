@@ -28,65 +28,63 @@ class AttributeRentalService
 
         return $query->orderBy('play_date')->orderBy('start_play_time')->get()->map(function ($detail) {
             return [
-                'detail_id' => $detail->id,
-                'booking_id' => $detail->fk_booking_id,
-                'field_id' => $detail->booking->fk_field_id,
-                'field_name' => $detail->booking->field->name ?? 'Unknown',
-                'team_name' => $detail->booking->team_name ?? 'Unknown',
-                'customer_name' => $detail->booking->user->name ?? 'Guest',
+                'detail_id'      => $detail->id,
+                'booking_id'     => $detail->fk_booking_id,
+                'field_id'       => $detail->booking->fk_field_id,
+                'field_name'     => $detail->booking->field->name ?? 'Unknown',
+                'team_name'      => $detail->booking->team_name ?? 'Unknown',
+                'customer_name'  => $detail->booking->user->name ?? 'Guest',
                 'customer_phone' => $detail->booking->customer_phone ?? '',
-                'play_date' => Carbon::parse($detail->play_date)->format('Y-m-d'),
-                'start_time' => Carbon::parse($detail->start_play_time)->format('H:i'),
-                'end_time' => Carbon::parse($detail->end_play_time)->format('H:i'),
+                'play_date'      => Carbon::parse($detail->play_date)->format('Y-m-d'),
+                'start_time'     => Carbon::parse($detail->start_play_time)->format('H:i'),
+                'end_time'       => Carbon::parse($detail->end_play_time)->format('H:i'),
             ];
         });
     }
 
     public function executeRental(array $data): array
     {
-        // Validasi Ketersediaan Atribut dan Hak Akses sebelum membuka Transaksi DB
-        foreach ($data['items'] as $item) {
-            $attribute = Attribute::findOrFail($item['fk_attribute_id']);
-
-            if ($attribute->status === GeneralStatus::INACTIVE->value) {
-                throw new UnprocessableEntityHttpException("Atribut {$attribute->name} sedang tidak tersedia.");
-            }
-            if ($attribute->stock < $item['quantity']) {
-                throw new UnprocessableEntityHttpException("Stok tidak mencukupi. Sisa stok {$attribute->name}: {$attribute->stock}");
-            }
-        }
-
         return DB::transaction(function () use ($data) {
             $createdRentals = [];
+            $formattedTransactionDate = Carbon::parse($data['transaction_date'])->format('Y-m-d');
 
             foreach ($data['items'] as $item) {
-                $attribute = Attribute::findOrFail($item['fk_attribute_id']);
-                $attribute->decrement('stock', $item['quantity']);
+                $attribute = Attribute::where('id', $item['fk_attribute_id'])->lockForUpdate()->firstOrFail();
+
+                if ($attribute->status === GeneralStatus::INACTIVE->value) {
+                    throw new UnprocessableEntityHttpException("Atribut {$attribute->name} sedang tidak aktif.");
+                }
+
+                if ($attribute->stock < $item['quantity']) {
+                    throw new UnprocessableEntityHttpException("Stok tidak mencukupi. Sisa stok {$attribute->name}: {$attribute->stock}");
+                }
 
                 $totalPrice = $attribute->price_hour * $item['quantity'] * $data['duration_hours'];
 
                 $rental = BookingAttribute::create([
-                    'fk_booking_id' => $data['fk_booking_id'],
-                    'fk_attribute_id' => $item['fk_attribute_id'],
-                    'quantity' => $item['quantity'],
-                    'price' => $attribute->price_hour,
-                    'total' => $totalPrice,
-                    'transaction_date' => $data['transaction_date'],
-                    'status' => RentalStatus::BORROWED->value,
-                    'customer_name' => $data['customer_name'],
-                    'customer_phone' => $data['customer_phone'] ?? null,
-                    'duration_hours' => $data['duration_hours'],
+                    'fk_booking_detail_id' => $data['fk_booking_detail_id'],
+                    'fk_attribute_id'      => $item['fk_attribute_id'],
+                    'quantity'             => $item['quantity'],
+                    'price'                => $attribute->price_hour,
+                    'total'                => $totalPrice,
+                    'transaction_date'     => $formattedTransactionDate,
+                    'status'               => RentalStatus::BORROWED->value,
+                    'customer_name'        => $data['customer_name'],
+                    'customer_phone'       => $data['customer_phone'] ?? null,
+                    'duration_hours'       => $data['duration_hours'],
                 ]);
+
+                $attribute->decrement('stock', $item['quantity']);
 
                 $rental->load('attribute:id,name,type');
                 $createdRentals[] = $rental;
             }
 
             return [
-                'items' => $createdRentals,
-                'total_price' => collect($createdRentals)->sum(fn($rental) => $rental->total),
-                'customer_name' => $data['customer_name'],
-                'transaction_date' => $data['transaction_date'],
+                'items'            => $createdRentals,
+                'total_price'      => collect($createdRentals)->sum(fn($rental) => $rental->total),
+                'customer_name'    => $data['customer_name'],
+                'transaction_date' => $formattedTransactionDate,
             ];
         });
     }
@@ -112,7 +110,7 @@ class AttributeRentalService
     public function getHistory(array $fieldIds, array $filters)
     {
         /** @var \Illuminate\Database\Eloquent\Builder $query */
-        $query = BookingAttribute::with('attribute:id,name,type,fk_field_id');
+        $query = BookingAttribute::with(['attribute:id,name,type,fk_field_id', 'bookingDetail.booking']);
 
         if (!empty($fieldIds)) {
             $query->whereHas('attribute', function ($q) use ($fieldIds) {
@@ -136,6 +134,6 @@ class AttributeRentalService
             $query->where('status', $filters['status']);
         }
 
-        return $query->latest()->paginate($filters['limit'] ?? 20);
+        return $query->latest()->paginate($filters['limit'] ?? 50);
     }
 }

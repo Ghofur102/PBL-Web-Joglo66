@@ -14,11 +14,15 @@ use App\Http\Controllers\Tenant\Payment\DuitkuController;
 use App\Http\Controllers\Admin\AttributeController;
 use App\Http\Controllers\Admin\AttributeRentalController;
 use App\Http\Controllers\Admin\ExpenseController;
-use App\Http\Controllers\LaporanController;
-use App\Http\Controllers\Treasure\GajiController;
-use App\Http\Controllers\Owner\KaryawanController;
-use App\Http\Controllers\Owner\UnduhLaporanController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\Treasure\SalaryController;
+use App\Http\Controllers\Owner\EmployeeController;
+use App\Http\Controllers\Owner\OwnerFieldController;
+use App\Http\Controllers\Owner\DownloadReportController;
 
+if (!defined('ROUTE_LOGOUT')) {
+    define('ROUTE_LOGOUT', '/logout');
+}
 Route::post('/duitku/callback', [DuitkuController::class, 'callback']);
 
 Route::get('/hello', function () {
@@ -28,7 +32,7 @@ Route::get('/hello', function () {
 Route::post('/login', [AuthController::class, 'login']);
 
 Route::prefix('admin')->middleware(['auth:sanctum', 'check.field.admin'])->group(function () {
-    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post(ROUTE_LOGOUT, [AuthController::class, 'logout']);
 
     Route::get('/dashboard', [DashboardController::class, 'dashboard']);
     Route::get('/profile', [AuthController::class, 'profile']);
@@ -72,24 +76,28 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'check.field.admin'])->group
 });
 
 Route::prefix('treasurer')->middleware(['auth:sanctum'])->group(function () {
-    Route::get('/gaji', [GajiController::class, 'index']);
-    Route::post('/gaji/update', [GajiController::class, 'update']);
-    Route::post('/gaji/sync', [GajiController::class, 'sync']);
-    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/gaji', [SalaryController::class, 'index']);
+    Route::post('/gaji/update', [SalaryController::class, 'update']);
+    Route::post('/gaji/sync', [SalaryController::class, 'sync']);
+    Route::post(ROUTE_LOGOUT, [AuthController::class, 'logout']);
 });
 
 Route::prefix('owner')->middleware(['auth:sanctum'])->group(function () {
-    Route::get('/karyawan', [KaryawanController::class, 'index']);
-    Route::post('/karyawan', [KaryawanController::class, 'store']);
-    Route::post('/karyawan/{id}/update', [KaryawanController::class, 'update']);
-    Route::post('/karyawan/{id}/delete', [KaryawanController::class, 'destroy']);
+    Route::get('/karyawan', [EmployeeController::class, 'index']);
+    Route::post('/karyawan', [EmployeeController::class, 'store']);
+    Route::post('/karyawan/{id}/update', [EmployeeController::class, 'update']);
+    Route::post('/karyawan/{id}/delete', [EmployeeController::class, 'destroy']);
 
-    Route::get('/laporan-pdf/preview', [UnduhLaporanController::class, 'preview']);
-    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/fields', [OwnerFieldController::class, 'index']);
+    Route::post('/fields', [OwnerFieldController::class, 'store']);
+    Route::post('/fields/{id}/update', [OwnerFieldController::class, 'update']);
+
+    Route::get('/laporan-pdf/preview', [DownloadReportController::class, 'preview']);
+    Route::post(ROUTE_LOGOUT, [AuthController::class, 'logout']);
 });
 
-Route::get('/laporan-bulanan', [LaporanController::class, 'index'])->middleware('auth:sanctum');
+Route::get('/laporan-bulanan', [ReportController::class, 'index'])->middleware('auth:sanctum');
 
-Route::get('/owner/laporan-pdf/download', [UnduhLaporanController::class, 'download'])
+Route::get('/owner/laporan-pdf/download', [DownloadReportController::class, 'download'])
         ->name('owner.laporan.download')
         ->middleware('signed');

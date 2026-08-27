@@ -2,134 +2,140 @@
 
 namespace App\Services;
 
-use App\Models\Expense;
-use App\Models\EmployeeSalary;
 use App\Models\Payment;
+use App\Models\Expense;
+use App\Models\BookingAttribute;
 use App\Enums\PaymentStatus;
 use App\Enums\PaymentType;
 use Carbon\Carbon;
 
 class FinancialReportService
 {
-    private string $formatDate = "Y-m-d H:i:s";
-    private const MONTH_MAP = [
-        1 => 'january', 2 => 'february', 3 => 'march', 4 => 'april',
-        5 => 'may', 6 => 'june', 7 => 'july', 8 => 'august',
-        9 => 'september', 10 => 'october', 11 => 'november', 12 => 'december',
-    ];
+    protected string $paymentDateCol;
+    protected string $expenseDateCol;
+    protected string $attributeDateCol;
 
-    public function getMonthlyData(int $bulan, int $tahun): array
+    public function __construct()
     {
-        $monthEnum = self::MONTH_MAP[$bulan];
-        $startDate = Carbon::create($tahun, $bulan, 1)->startOfMonth();
-        $endDate   = Carbon::create($tahun, $bulan, 1)->endOfMonth();
+        $this->paymentDateCol = 'paid_at';
+        $this->expenseDateCol = 'expense_date';
+        $this->attributeDateCol = 'transaction_date';
+    }
 
-        $payments = Payment::whereBetween('paid_at', [$startDate, $endDate])
+    public function getMonthlyReport(int $month, int $year, array $fieldIds = []): array
+    {
+        $startDateTime = Carbon::createFromDate($year, $month, 1)->startOfMonth()->toDateTimeString();
+        $endDateTime = Carbon::createFromDate($year, $month, 1)->endOfMonth()->endOfDay()->toDateTimeString();
+
+        $paymentQuery = Payment::query()
             ->where('status', PaymentStatus::SUCCESS->value)
-            ->with(['booking.field'])
-            ->get();
+            ->whereBetween($this->paymentDateCol, [$startDateTime, $endDateTime]);
 
-        $totalDP         = $payments->filter(fn($p) => strtolower(trim($p->payment_type)) === PaymentType::DOWN_PAYMENT->value)->sum('amount');
-        $totalPelunasan  = $payments->filter(fn($p) => strtolower(trim($p->payment_type)) === PaymentType::FINAL_PAYMENT->value)->sum('amount');
-        $totalReschedule = $payments->filter(fn($p) => strtolower(trim($p->payment_type)) === PaymentType::RESCHEDULE_FEE->value)->sum('amount');
-        $totalDPHangus   = $payments->filter(fn($p) => strtolower(trim($p->payment_type)) === 'dp hangus')->sum('amount');
-        $totalAtribut    = $payments->filter(fn($p) => in_array(strtolower(trim($p->payment_type)), ['attribute rental', 'attribute']))->sum('amount');
-        $totalRefund     = $payments->filter(fn($p) => strtolower(trim($p->payment_type)) === PaymentType::REFUND->value)->sum('amount');
+        if (!empty($fieldIds)) {
+            $paymentQuery->whereHas('booking', function ($q) use ($fieldIds) {
+                $q->whereIn('fk_field_id', $fieldIds);
+            });
+        }
 
-        $grossIncome = $totalDP + $totalPelunasan + $totalReschedule + $totalDPHangus + $totalAtribut;
-        $netIncome   = $grossIncome - $totalRefund;
+        $grossBookingIncome = (clone $paymentQuery)
+            ->whereIn('payment_type', [
+                PaymentType::DOWN_PAYMENT->value,
+                PaymentType::FINAL_PAYMENT->value,
+                PaymentType::RESCHEDULE_FEE->value,
+            ])->sum('amount');
 
-        $salaries = EmployeeSalary::where('period_month', $monthEnum)
-            ->where('period_year', $tahun)
-            ->get();
+        $totalRefund = (clone $paymentQuery)
+            ->where('payment_type', PaymentType::REFUND->value)
+            ->sum('amount');
 
-        $totalGaji = $salaries->sum(fn ($s) => $s->amount_paid + $s->bonus - $s->deduction);
-        $salaryExpenseIds = $salaries->pluck('fk_expense_id')->filter()->toArray();
+        $attributeQuery = BookingAttribute::query()
+            ->whereBetween($this->attributeDateCol, [$startDateTime, $endDateTime])
+            ->whereNotIn('status', ['cancelled', 'batal', 'rejected']);
 
-        $expenses = Expense::whereBetween('expense_date', [$startDate->toDateString(), $endDate->toDateString()])
-            ->when(!empty($salaryExpenseIds), fn ($query) => $query->whereNotIn('id', $salaryExpenseIds))
-            ->get();
+        if (!empty($fieldIds)) {
+            $attributeQuery->whereHas('attribute', function ($q) use ($fieldIds) {
+                $q->whereIn('fk_field_id', $fieldIds);
+            });
+        }
 
-        $totalOperasional = $expenses->sum('amount');
-        $totalPengeluaran = $totalOperasional + $totalGaji;
+        $totalAttributeIncome = (clone $attributeQuery)->sum('total');
 
-        $paymentDetails = $payments->map(function ($p) {
-            $typeStr = strtolower(trim($p->payment_type));
-            $isRefund = $typeStr === PaymentType::REFUND->value;
-            $fieldName = $p->booking->field->name ?? 'Lapangan';
+        $expenseQuery = Expense::query()
+            ->whereBetween($this->expenseDateCol, [$startDateTime, $endDateTime]);
 
-            return [
-                'id'           => 'pay_' . $p->id,
-                'date'         => Carbon::parse($p->paid_at)->format($this->formatDate),
-                'type'         => $isRefund ? 'refund' : 'income',
-                'payment_type' => $p->payment_type,
-                'category'     => $p->payment_type,
-                'title'        => $isRefund ? 'Pengembalian Dana (Refund)' : 'Pembayaran ' . ucwords(str_replace('_', ' ', $p->payment_type)),
-                'description'  => 'Penyewaan Lapangan',
-                'field_name'   => $fieldName,
-                'method'       => strtoupper($p->method ?? 'CASH'),
-                'amount'       => (int)$p->amount,
-            ];
-        });
+        if (!empty($fieldIds)) {
+            $expenseQuery->whereIn('fk_field_id', $fieldIds);
+        }
 
-        $expenseDetails = $expenses->map(fn($e) => [
-            'id'           => 'exp_' . $e->id,
-            'date'         => Carbon::parse($e->expense_date)->format($this->formatDate),
-            'type'         => 'expense',
-            'payment_type' => 'operational_expense',
-            'category'     => $e->category,
-            'title'        => $e->name ?? ('Pengeluaran ' . $e->category),
-            'description'  => 'Pengeluaran Lapangan (' . $e->category . ')',
-            'field_name'   => 'Operasional',
-            'method'       => 'CASH',
-            'amount'       => (int)$e->amount,
-        ]);
+        $totalExpense = (clone $expenseQuery)
+            ->selectRaw('SUM(quantity * unit_price) as total')
+            ->value('total') ?? 0;
 
-        $salaryDetails = $salaries->map(function($s) use ($tahun, $bulan) {
-            $dateObj = $s->payment_date ? Carbon::parse($s->payment_date) : Carbon::create($tahun, $bulan, date('t', strtotime("$tahun-$bulan-01")));
-            return [
-                'id'           => 'sal_' . $s->id,
-                'date'         => $dateObj->format($this->formatDate),
-                'type'         => 'expense',
-                'payment_type' => 'salary',
-                'category'     => 'Gaji',
-                'title'        => 'Pembayaran Gaji Karyawan',
-                'description'  => 'Gaji Karyawan Periode ' . $s->period_month,
-                'field_name'   => 'Gaji',
-                'method'       => 'TRANSFER',
-                'amount'       => (int)($s->amount_paid + $s->bonus - $s->deduction),
-            ];
-        });
+        $grossIncome = $grossBookingIncome + $totalAttributeIncome;
+        $netIncome = $grossIncome - $totalRefund;
+        $netProfit = $netIncome - $totalExpense;
 
-        $allTransactions = $paymentDetails
-            ->concat($expenseDetails)
-            ->concat($salaryDetails)
-            ->sortByDesc('date')
-            ->values()
-            ->all();
+        $paymentsData = $paymentQuery->get();
+        $attributesData = $attributeQuery->get();
+        $expensesData = $expenseQuery->get();
 
-        return [
-            'summary' => [
-                'gross_income'  => (int)$grossIncome,
-                'total_refund'  => (int)$totalRefund,
-                'net_income'    => (int)$netIncome,
-                'total_expense' => (int)$totalPengeluaran,
-                'net_profit'    => (int)($netIncome - $totalPengeluaran),
-            ],
-            'transactions' => $allTransactions,
-            'details' => [
-                'income' => [
-                    'down_payment'     => (int)$totalDP,
-                    'final_payment'    => (int)$totalPelunasan,
-                    'reschedule_fee'   => (int)$totalReschedule,
-                    'forsaken_dp'      => (int)$totalDPHangus,
-                    'attribute_rental' => (int)$totalAtribut,
-                ],
-                'expense' => [
-                    'operational' => (int)$totalOperasional,
-                    'salary'      => (int)$totalGaji,
-                ],
-            ],
+        $transactions = $this->buildTransactionList($paymentsData, $attributesData, $expensesData);
+
+        $summaryData = [
+            'month'                  => $month,
+            'year'                   => $year,
+            'gross_booking_income'   => (int) $grossBookingIncome,
+            'total_attribute_income' => (int) $totalAttributeIncome,
+            'gross_income'           => (int) $grossIncome,
+            'total_refund'           => (int) $totalRefund,
+            'net_income'             => (int) $netIncome,
+            'total_expense'          => (int) $totalExpense,
+            'net_profit'             => (int) $netProfit,
         ];
+
+        return array_merge($summaryData, [
+            'summary'      => $summaryData,
+            'transactions' => $transactions,
+        ]);
+    }
+
+    protected function buildTransactionList($payments, $attributes, $expenses): array
+    {
+        $mappedPayments = $payments->map(function ($item) {
+            return [
+                'id'               => $item->id,
+                'transaction_date' => $item->{$this->paymentDateCol},
+                'amount'           => $item->amount,
+                'transaction_type' => 'payment',
+                'description'      => $item->payment_type,
+            ];
+        });
+
+        $mappedAttributes = $attributes->map(function ($item) {
+            return [
+                'id'               => $item->id,
+                'transaction_date' => $item->{$this->attributeDateCol},
+                'amount'           => $item->total,
+                'transaction_type' => 'attribute',
+                'description'      => $item->status,
+            ];
+        });
+
+        $mappedExpenses = $expenses->map(function ($item) {
+            return [
+                'id'               => $item->id,
+                'transaction_date' => $item->{$this->expenseDateCol},
+                'amount'           => $item->quantity * $item->unit_price,
+                'transaction_type' => 'expense',
+                'description'      => $item->note,
+            ];
+        });
+
+        return $mappedPayments
+            ->concat($mappedAttributes)
+            ->concat($mappedExpenses)
+            ->sortByDesc('transaction_date')
+            ->values()
+            ->toArray();
     }
 }

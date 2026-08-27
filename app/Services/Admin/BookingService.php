@@ -2,7 +2,6 @@
 
 namespace App\Services\Admin;
 
-use App\Models\Field;
 use App\Models\Booking;
 use App\Models\BookingDetail;
 use App\Models\Payment;
@@ -20,42 +19,27 @@ class BookingService
 
     public function getBookingList(array $fieldIds, array $filters): array
     {
-        $today = Carbon::now()->format('Y-m-d');
         $query = Booking::query()->with(['user', 'details', 'payments', 'field']);
 
-        if (!empty($fieldIds)) {
-            $query->whereIn('fk_field_id', $fieldIds);
-        }
-
-        if (!empty($filters['field_id'])) {
-            $query->where('fk_field_id', $filters['field_id']);
-        }
-
-        if (!empty($filters['search'])) {
-            $query->where('team_name', 'LIKE', "%{$filters['search']}%");
-        }
+        $this->applyBookingFilters($query, $fieldIds, $filters);
 
         $bookings = $query->get();
-        $todayBookings = [];
-        $upcomingBookings = [];
+        $allDetails = $this->extractAllBookingDetails($bookings, $filters);
 
-        foreach ($bookings as $booking) {
-            $fieldName = $booking->field->name ?? 'Unknown Field';
+        usort($allDetails, fn($a, $b) => strcmp($a['sort_datetime'], $b['sort_datetime']));
 
-            foreach ($booking->details as $detail) {
-                $this->categorizeDetail($todayBookings, $upcomingBookings, $booking, $detail, $fieldName, $today, $filters);
-            }
+        $groupedByDate = $this->groupDetailsByDate($allDetails);
+
+        $hasFilter = !empty($filters['search']) || !empty($filters['start_date']) || !empty($filters['end_date']);
+        if (!$hasFilter) {
+            $groupedByDate = $this->limitToLatestDates($groupedByDate);
         }
 
-        usort($todayBookings, fn($a, $b) => strcmp($a['sort_datetime'], $b['sort_datetime']));
-        usort($upcomingBookings, fn($a, $b) => strcmp($a['sort_datetime'], $b['sort_datetime']));
-
+        $resultGroups = $this->buildResultGroups($groupedByDate);
         $closedAffectedCount = $this->countClosedAffectedBookings($fieldIds, $filters['field_id'] ?? null);
 
-        $limit = $filters['limit'] ?? 20;
         return [
-            'today'                 => array_slice($todayBookings, 0, $limit),
-            'upcoming'              => array_slice($upcomingBookings, 0, $limit),
+            'grouped_bookings'      => $resultGroups,
             'closed_affected_count' => $closedAffectedCount,
         ];
     }
@@ -92,6 +76,8 @@ class BookingService
 
     public function getBookingDetailInfo(BookingDetail $detail): array
     {
+        $detail->booking->load(['details.attributes.attribute', 'payments', 'field', 'user']);
+
         $start = Carbon::parse($detail->start_play_time);
         $end = Carbon::parse($detail->end_play_time);
         $duration = max(1, $start->diffInHours($end));
@@ -105,9 +91,7 @@ class BookingService
         ])->sum('amount');
 
         $totalBookingRefund = $allPayments->where('payment_type', PaymentType::REFUND->value)->sum('amount');
-
         $totalSessionsCount = $detail->booking->details->count();
-
         $globalPaid = $this->calculateGlobalPaidForBooking($allPayments);
 
         $allocatedGlobalDp = $totalSessionsCount > 0 ? ($globalPaid / $totalSessionsCount) : 0;
@@ -131,6 +115,18 @@ class BookingService
                 ? 0
                 : max(0, $item->price - $sessionPaid);
 
+            $rentedAttributes = $item->attributes->map(function ($ba) {
+                return [
+                    'id'            => $ba->id,
+                    'name'          => $ba->attribute->name ?? 'Atribut',
+                    'quantity'      => (int) $ba->quantity,
+                    'price'         => (int) $ba->price,
+                    'total'         => (int) $ba->total,
+                    'status'        => $ba->status,
+                    'customer_name' => $ba->customer_name,
+                ];
+            })->values()->toArray();
+
             return [
                 'id'                => $item->id,
                 'play_date'         => Carbon::parse($item->play_date)->format('d M Y'),
@@ -140,7 +136,8 @@ class BookingService
                 'status'            => $item->status,
                 'total_paid'        => (int)$sessionPaid,
                 'remaining_payment' => (int)$remainingPayment,
-                'refund_amount'     => (int)$specificRefund
+                'refund_amount'     => (int)$specificRefund,
+                'attributes'        => $rentedAttributes,
             ];
         });
 
@@ -231,6 +228,85 @@ class BookingService
         return ($specificPaid - $specificRefund) + ($genericPaid / $totalDetailsCount);
     }
 
+    private function applyBookingFilters($query, array $fieldIds, array $filters): void
+    {
+        if (!empty($fieldIds)) {
+            $query->whereIn('fk_field_id', $fieldIds);
+        }
+
+        if (!empty($filters['field_id'])) {
+            $query->where('fk_field_id', $filters['field_id']);
+        }
+
+        if (!empty($filters['search'])) {
+            $search = $filters['search'];
+            $query->where('team_name', 'LIKE', "%{$search}%");
+        }
+    }
+
+    private function extractAllBookingDetails($bookings, array $filters): array
+    {
+        $allDetails = [];
+
+        foreach ($bookings as $booking) {
+            $fieldName = $booking->field->name ?? 'Unknown Field';
+            foreach ($booking->details as $detail) {
+                if ($this->shouldSkipDetail($detail->play_date, $filters['start_date'] ?? null, $filters['end_date'] ?? null)) {
+                    continue;
+                }
+                $item = $this->buildBookingItem($booking, $detail, $fieldName);
+                $item['play_date'] = $detail->play_date;
+                $allDetails[] = $item;
+            }
+        }
+
+        return $allDetails;
+    }
+
+    private function groupDetailsByDate(array $allDetails): array
+    {
+        $groupedByDate = [];
+        foreach ($allDetails as $item) {
+            $date = $item['play_date'];
+            $groupedByDate[$date][] = $item;
+        }
+        return $groupedByDate;
+    }
+
+    private function limitToLatestDates(array $groupedByDate): array
+    {
+        $today = Carbon::now()->format('Y-m-d');
+        $futureOrTodayDates = array_filter(array_keys($groupedByDate), fn($d) => $d >= $today);
+
+        if (!empty($futureOrTodayDates)) {
+            $selectedDates = array_slice($futureOrTodayDates, 0, 5);
+        } else {
+            $allDates = array_keys($groupedByDate);
+            rsort($allDates);
+            $selectedDates = array_reverse(array_slice($allDates, 0, 5));
+        }
+
+        $filteredGrouped = [];
+        foreach ($selectedDates as $d) {
+            $filteredGrouped[$d] = $groupedByDate[$d];
+        }
+
+        return $filteredGrouped;
+    }
+
+    private function buildResultGroups(array $groupedByDate): array
+    {
+        $resultGroups = [];
+        foreach ($groupedByDate as $dateStr => $items) {
+            $resultGroups[] = [
+                'play_date'  => $dateStr,
+                'date_label' => $this->formatIndonesianDate($dateStr),
+                'bookings'   => $items,
+            ];
+        }
+        return $resultGroups;
+    }
+
     private function calculateGlobalPaidForBooking($allPayments): float
     {
         return (float) $allPayments->whereNull('fk_booking_detail_id')
@@ -294,29 +370,6 @@ class BookingService
             'remaining_payment' => $remainingPayment,
             'refund_amount'     => $refundAmount
         ];
-    }
-
-    private function categorizeDetail(array &$todayBookings, array &$upcomingBookings, $booking, $detail, string $fieldName, string $today, array $filters): void
-    {
-        if ($this->shouldSkipDetail($detail->play_date, $filters['start_date'] ?? null, $filters['end_date'] ?? null)) {
-            return;
-        }
-
-        $bookingItem = $this->buildBookingItem($booking, $detail, $fieldName);
-
-        if ($this->hasActiveFilters($filters) || $detail->play_date === $today) {
-            $todayBookings[] = $bookingItem;
-            return;
-        }
-
-        if ($detail->play_date > $today) {
-            $upcomingBookings[] = $bookingItem;
-        }
-    }
-
-    private function hasActiveFilters(array $filters): bool
-    {
-        return !empty($filters['start_date']) || !empty($filters['end_date']) || !empty($filters['search']);
     }
 
     private function countClosedAffectedBookings(array $fieldIds, mixed $filterFieldId): int
@@ -405,5 +458,40 @@ class BookingService
         }
 
         return true;
+    }
+
+    private function formatIndonesianDate(string $dateStr): string
+    {
+        $carbon = Carbon::parse($dateStr);
+        $days = [
+            'Sunday'    => 'Minggu',
+            'Monday'    => 'Senin',
+            'Tuesday'   => 'Selasa',
+            'Wednesday' => 'Rabu',
+            'Thursday'  => 'Kamis',
+            'Friday'    => 'Jumat',
+            'Saturday'  => 'Sabtu'
+        ];
+        $months = [
+            1  => 'Januari',
+            2  => 'Februari',
+            3  => 'Maret',
+            4  => 'April',
+            5  => 'Mei',
+            6  => 'Juni',
+            7  => 'Juli',
+            8  => 'Agustus',
+            9  => 'September',
+            10 => 'Oktober',
+            11 => 'November',
+            12 => 'Desember'
+        ];
+
+        $dayName = $days[$carbon->format('l')] ?? $carbon->format('l');
+        $dayNum = $carbon->format('d');
+        $monthName = $months[(int)$carbon->format('m')] ?? $carbon->format('F');
+        $year = $carbon->format('Y');
+
+        return "{$dayName}, {$dayNum} {$monthName} {$year}";
     }
 }

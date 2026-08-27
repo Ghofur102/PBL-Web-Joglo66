@@ -14,14 +14,14 @@ class StoreRentalRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'fk_booking_id'           => 'required|exists:bookings,id',
-            'items'                   => 'required|array|min:1',
-            'items.*.fk_attribute_id' => 'required|exists:attributes,id',
+            'fk_booking_detail_id'    => 'required|integer|exists:booking_details,id',
+            'items'                    => 'required|array|min:1',
+            'items.*.fk_attribute_id' => 'required|integer|exists:attributes,id',
             'items.*.quantity'        => 'required|integer|min:1',
             'customer_name'           => 'required|string|max:100',
             'customer_phone'          => 'nullable|string|max:20',
             'duration_hours'          => 'required|integer|min:1',
-            'transaction_date'        => 'required|date',
+            'transaction_date'        => 'required|date_format:Y-m-d',
         ];
     }
 }

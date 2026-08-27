@@ -4,55 +4,43 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\DB;
-use App\Models\BookingDetail;
+use Symfony\Component\HttpFoundation\Response;
 
 class CheckFieldAdmin
 {
     public function handle(Request $request, Closure $next): Response
     {
+        $success = null;
+        $message = null;
+        $status_response = null;
+
         $user = $request->user();
 
         if (!$user) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Unauthorized.'
-            ], 401);
+            $success = false;
+            $message = 'Unauthenticated.';
+            $status_response = 401;
         }
 
-        if ($user->role !== 'worker') {
+        if ($user->role === 'owner') {
             return $next($request);
         }
 
-        $fieldId = $request->route('field_id') ?? $request->input('field_id') ?? $request->input('fk_field_id');
+        if (in_array($user->role, ['worker', 'treasurer'], true)) {
+            $hasField = DB::table('field_workers')
+                ->where('fk_user_id', $user->id)
+                ->exists();
 
-        if (!$fieldId && $request->route('detail_booking_id')) {
-            $detailId = $request->route('detail_booking_id');
-
-            $bookingDetail = BookingDetail::with('booking')->find($detailId);
-
-            if ($bookingDetail && $bookingDetail->booking) {
-                $fieldId = $bookingDetail->booking->fk_field_id;
+            if ($hasField) {
+                return $next($request);
             }
+
+            $success = false;
+            $message = 'Akses ditolak. Anda belum ditugaskan ke lapangan manapun.';
+            $status_response = 403;
         }
 
-        if (!$fieldId) {
-            return $next($request);
-        }
-
-        $isAuthorized = DB::table('field_admins')
-            ->where('fk_user_id', $user->id)
-            ->where('fk_field_id', $fieldId)
-            ->exists();
-
-        if (!$isAuthorized) {
-            return response()->json([
-                'status' => 'error',
-                'message' => "Forbidden. Anda tidak ditugaskan untuk mengelola lapangan ini."
-            ], 403);
-        }
-
-        return $next($request);
+        return response()->json(['success' => $success, 'message' => $message], $status_response);
     }
 }

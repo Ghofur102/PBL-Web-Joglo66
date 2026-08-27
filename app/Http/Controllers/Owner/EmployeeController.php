@@ -7,13 +7,12 @@ use App\Models\Employee;
 use App\Http\Requests\Owner\StoreEmployeeRequest;
 use App\Http\Requests\Owner\UpdateEmployeeRequest;
 use App\Services\Owner\EmployeeService;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
-class KaryawanController extends Controller
+class EmployeeController extends Controller
 {
     protected EmployeeService $employeeService;
 
@@ -24,55 +23,39 @@ class KaryawanController extends Controller
 
     public function index(): JsonResponse
     {
-        $status = 200;
-        $data = [];
-
         try {
             $employees = $this->employeeService->getEmployeesList();
-            $data = [
+            return response()->json([
                 'success' => true,
                 'data'    => $employees
-            ];
+            ], 200);
         } catch (Throwable $e) {
-            $status = 500;
-            $data = [
+            return response()->json([
                 'success' => false,
-                'message' => 'Gagal memuat data karyawan.'
-            ];
+                'message' => 'Gagal memuat data karyawan: ' . $e->getMessage()
+            ], 500);
         }
-
-        return response()->json($data, $status);
     }
 
     public function store(StoreEmployeeRequest $request): JsonResponse
     {
-        $status = 201;
-        $data = [];
-
         try {
             $employee = $this->employeeService->storeEmployee($request->validated());
-            $data = [
+            return response()->json([
                 'success' => true,
                 'message' => 'Karyawan berhasil ditambahkan.',
                 'data'    => $employee
-            ];
+            ], 201);
         } catch (Throwable $e) {
-            $status = 500;
-            $data = [
+            return response()->json([
                 'success' => false,
-                'message' => 'Gagal menambahkan karyawan.',
-                'error'   => $e->getMessage()
-            ];
+                'message' => 'Gagal menambahkan karyawan: ' . $e->getMessage()
+            ], 500);
         }
-
-        return response()->json($data, $status);
     }
 
     public function update(UpdateEmployeeRequest $request, $id): JsonResponse
     {
-        $status = 200;
-        $data = [];
-
         try {
             $employee = Employee::query()->find($id);
             if (!$employee) {
@@ -80,33 +63,25 @@ class KaryawanController extends Controller
             }
 
             $this->employeeService->updateEmployee($employee, $request->validated());
-            $data = [
+            return response()->json([
                 'success' => true,
                 'message' => 'Data karyawan berhasil diperbarui.'
-            ];
+            ], 200);
         } catch (HttpException $e) {
-            $status = $e->getStatusCode();
-            $data = [
+            return response()->json([
                 'success' => false,
                 'message' => $e->getMessage()
-            ];
+            ], $e->getStatusCode());
         } catch (Throwable $e) {
-            $status = 500;
-            $data = [
+            return response()->json([
                 'success' => false,
-                'message' => 'Gagal memperbarui data.',
-                'error'   => $e->getMessage()
-            ];
+                'message' => 'Gagal memperbarui data: ' . $e->getMessage()
+            ], 500);
         }
-
-        return response()->json($data, $status);
     }
 
     public function destroy($id): JsonResponse
     {
-        $status = 200;
-        $data = [];
-
         try {
             $employee = Employee::query()->find($id);
             if (!$employee) {
@@ -114,25 +89,20 @@ class KaryawanController extends Controller
             }
 
             $this->employeeService->destroyEmployee($employee);
-            $data = [
+            return response()->json([
                 'success' => true,
                 'message' => 'Karyawan berhasil dihapus.'
-            ];
+            ], 200);
         } catch (HttpException $e) {
-            $status = $e->getStatusCode();
-            $data = [
+            return response()->json([
                 'success' => false,
                 'message' => $e->getMessage()
-            ];
+            ], $e->getStatusCode());
         } catch (Throwable $e) {
-            $status = 500;
-            $data = [
+            return response()->json([
                 'success' => false,
-                'message' => 'Gagal menghapus data.',
-                'error'   => $e->getMessage()
-            ];
+                'message' => 'Gagal menghapus data: ' . $e->getMessage()
+            ], 500);
         }
-
-        return response()->json($data, $status);
     }
 }

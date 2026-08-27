@@ -43,7 +43,7 @@ class AuthController extends Controller
             $status = 500;
             $data = [
                 'success' => false,
-                'message' => 'Terjadi kesalahan pada sistem otentikasi.'
+                'message' => 'Terjadi kesalahan pada sistem otentikasi: ' . $e->getMessage()
             ];
         }
 
@@ -78,7 +78,7 @@ class AuthController extends Controller
             $status = 500;
             $data = [
                 'success' => false,
-                'message' => 'Gagal memuat data profil.'
+                'message' => 'Gagal memuat data profil: ' . $e->getMessage()
             ];
         }
 
@@ -102,7 +102,7 @@ class AuthController extends Controller
             $status = 500;
             $data = [
                 'success' => false,
-                'message' => 'Gagal memproses logout.'
+                'message' => 'Gagal memproses logout: ' . $e->getMessage()
             ];
         }
 

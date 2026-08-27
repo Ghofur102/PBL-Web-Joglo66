@@ -4,18 +4,18 @@ namespace App\Http\Controllers\Owner;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Owner\DownloadReportRequest;
-use App\Services\Owner\UnduhLaporanService;
+use App\Services\Owner\DownloadReportService;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
 
-class UnduhLaporanController extends Controller
+class DownloadReportController extends Controller
 {
-    protected UnduhLaporanService $unduhLaporanService;
+    protected DownloadReportService $downloadReportService;
 
-    public function __construct(UnduhLaporanService $unduhLaporanService)
+    public function __construct(DownloadReportService $downloadReportService)
     {
-        $this->unduhLaporanService = $unduhLaporanService;
+        $this->downloadReportService = $downloadReportService;
     }
 
     public function download(DownloadReportRequest $request): Response
@@ -25,7 +25,7 @@ class UnduhLaporanController extends Controller
         $content = '';
 
         try {
-            $result = $this->unduhLaporanService->generatePdfReport($request->validated());
+            $result = $this->downloadReportService->generatePdfReport($request->validated());
 
             $content = $result['content'];
             $headers = $result['headers'];

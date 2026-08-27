@@ -4,13 +4,16 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Services\Admin\DashboardService;
+use App\Http\Controllers\Traits\FieldAccessTrait;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Symfony\Component\HttpKernel\Exception\HttpException;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class DashboardController extends Controller
 {
+    use FieldAccessTrait;
+
     protected DashboardService $dashboardService;
 
     public function __construct(DashboardService $dashboardService)
@@ -20,41 +23,41 @@ class DashboardController extends Controller
 
     public function dashboard(Request $request): JsonResponse
     {
-        $status = 200;
-        $data = [];
-
         try {
             $user = $request->user();
-            $field = $this->dashboardService->resolveField($user, $request->field_id);
-            $metrics = $this->dashboardService->getDashboardMetrics($field);
+            $fieldIds = [];
 
-            $data = [
+            if ($user && in_array($user->role, ['worker', 'treasurer'], true)) {
+                $fieldIds = $this->getAccessibleFieldIds($user);
+            }
+
+            $dashboardData = $this->dashboardService->getDashboardData($fieldIds);
+
+            return response()->json([
                 'success' => true,
                 'message' => 'Dashboard data retrieved successfully',
-                'data'    => $metrics
-            ];
-        } catch (HttpException $e) {
-            $status = $e->getStatusCode();
-            $data = [
-                'success' => false,
-                'message' => $e->getMessage(),
-                'data'    => $status === 404 ? [
-                    'name'         => 'Belum Ada Lapangan',
-                    'slotTerisi'   => 0,
-                    'totalSlot'    => 0,
-                    'slotKosong'   => 0,
-                    'totalBooking' => 0,
-                ] : null
-            ];
+                'data'    => $dashboardData
+            ], 200);
         } catch (Throwable $e) {
-            $status = 500;
-            $data = [
-                'success' => false,
-                'message' => 'Internal server error: ' . $e->getMessage(),
-                'data'    => null
-            ];
-        }
 
-        return response()->json($data, $status);
+            return response()->json([
+                'success' => true,
+                'message' => 'Gagal memuat sebagian data dasbor.',
+                'data'    => [
+                    'today_date'            => date('d M Y'),
+                    'total_active_bookings' => 0,
+                    'active_bookings'       => 0,
+                    'today_income'          => 0,
+                    'income'                => 0,
+                    'total_income'          => 0,
+                    'today_expense'         => 0,
+                    'expense'               => 0,
+                    'total_expense'         => 0,
+                    'total_fields'          => 0,
+                    'schedules'             => [],
+                    'today_schedules'       => [],
+                ]
+            ], 200);
+        }
     }
 }
