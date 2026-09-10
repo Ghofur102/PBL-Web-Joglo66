@@ -7,7 +7,7 @@
     <div class="md:w-5/12 bg-gradient-to-br from-primary-dark to-primary p-8 md:p-16 flex flex-col justify-center items-center text-center text-white relative overflow-hidden">
         <div class="absolute inset-0 bg-black/5"></div>
         <div class="relative z-10 flex flex-col items-center">
-            <h2 class="text-lg md:text-xl font-medium mb-6 tracking-wide opacity-95">Selamat Datang Di</h2>
+            <h2 class="text-lg md:text-xl font-medium mb-6 tracking-wide opacity-95">Selamat Datang Di Website Penyewaan Lapangan Olahraga</h2>
             <div class="w-32 h-32 md:w-40 md:h-40 bg-white/10 rounded-tenant-full border border-white/20 shadow-tenant-md flex items-center justify-center text-5xl md:text-6xl mb-8 backdrop-blur-sm">
                 ⚽
             </div>
