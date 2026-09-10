@@ -2,13 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class BookingReschedule extends Model
+class BookingReschedule extends CoreDmlModel
 {
-    protected $connection = 'mysql_joglo66_app';
-
     protected $table = 'booking_reschedules';
 
     protected $fillable = [

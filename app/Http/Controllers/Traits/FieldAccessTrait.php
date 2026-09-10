@@ -9,8 +9,9 @@ trait FieldAccessTrait
 {
     protected function getAccessibleFieldIds(User $user): array
     {
-        if ($user->hasRestrictedFieldAccess()) {
-            return $user->fieldWorker()
+        if (in_array($user->role, ['worker', 'treasurer'], true)) {
+            return DB::table('field_workers')
+                ->where('fk_user_id', $user->id)
                 ->pluck('fk_field_id')
                 ->toArray();
         }
@@ -20,17 +21,16 @@ trait FieldAccessTrait
 
     protected function checkFieldAccess(?User $user, int $fieldId): bool
     {
+        $return = null;
         if (!$user) {
-            return false;
+            $return = false;
         }
 
         if ($user->role === 'owner') {
-            return true;
+            $return = true;
         }
 
-        $return = false;
-
-        if ($user->hasRestrictedFieldAccess()) {
+        if (in_array($user->role, ['worker', 'treasurer'], true)) {
             $return = DB::table('field_workers')
                 ->where('fk_user_id', $user->id)
                 ->where('fk_field_id', $fieldId)

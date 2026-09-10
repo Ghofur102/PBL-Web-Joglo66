@@ -2,12 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class EmployeeSalary extends Model
+class EmployeeSalary extends CoreDmlModel
 {
-    protected $connection = 'mysql_joglo66_app';
     protected $table = 'employee_salaries';
 
     protected $fillable = [

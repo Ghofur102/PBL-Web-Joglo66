@@ -1,15 +1,35 @@
 let formUi = {};
 let reviewUi = {};
 
+function getTextareaElement() {
+    const el = document.getElementById('cancelReason');
+    if (el) {
+        if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+            return el;
+        }
+        const inner = el.querySelector('textarea, input');
+        if (inner) return inner;
+    }
+    return document.querySelector('textarea');
+}
+
 function updateSubmitState() {
-    const hasReason = (formUi.reasonHidden?.value?.trim()?.length ?? 0) > 0;
+    const textarea = getTextareaElement();
+    const reasonValue = (formUi.reasonHidden?.value || textarea?.value || '').trim();
+    const hasReason = reasonValue.length > 0;
     const isAgreed = formUi.agreeCheck?.checked ?? false;
+
+    if (formUi.reasonHidden && hasReason) {
+        formUi.reasonHidden.value = reasonValue;
+    }
 
     if (formUi.btnSubmit) {
         if (hasReason && isAgreed) {
             formUi.btnSubmit.removeAttribute('disabled');
+            formUi.btnSubmit.disabled = false;
         } else {
             formUi.btnSubmit.setAttribute('disabled', 'true');
+            formUi.btnSubmit.disabled = true;
         }
     }
 }
@@ -17,19 +37,26 @@ function updateSubmitState() {
 function handleRadioChange(radio) {
     if (!radio.checked) return;
 
+    const textarea = getTextareaElement();
     const val = radio.value;
+
     if (val === 'Alasan Lainnya') {
-        if (formUi.reasonTextarea) {
-            formUi.reasonTextarea.value = '';
-            formUi.reasonTextarea.focus();
+        if (textarea) {
+            textarea.value = '';
+            textarea.focus();
         }
-    } else if (formUi.reasonTextarea) {
-        formUi.reasonTextarea.value = val;
+        if (formUi.reasonHidden) {
+            formUi.reasonHidden.value = '';
+        }
+    } else {
+        if (textarea) {
+            textarea.value = val;
+        }
+        if (formUi.reasonHidden) {
+            formUi.reasonHidden.value = val;
+        }
     }
 
-    if (formUi.reasonHidden && formUi.reasonTextarea) {
-        formUi.reasonHidden.value = formUi.reasonTextarea.value;
-    }
     updateSubmitState();
 }
 
@@ -37,6 +64,19 @@ function handleTextareaInput(value) {
     if (formUi.reasonHidden) {
         formUi.reasonHidden.value = value;
     }
+
+    if (formUi.radioButtons) {
+        const matchingRadio = Array.from(formUi.radioButtons).find(rb => rb.value === value.trim());
+        if (matchingRadio) {
+            matchingRadio.checked = true;
+        } else {
+            const otherRadio = Array.from(formUi.radioButtons).find(rb => rb.value === 'Alasan Lainnya');
+            if (otherRadio && value.trim().length > 0) {
+                otherRadio.checked = true;
+            }
+        }
+    }
+
     updateSubmitState();
 }
 
@@ -54,7 +94,7 @@ export function initializeCancelForm() {
     if (!cancelForm) return;
 
     formUi = {
-        reasonTextarea: document.getElementById('cancelReason'),
+        reasonTextarea: getTextareaElement(),
         reasonHidden: document.getElementById('inputReason'),
         agreeCheck: document.getElementById('agreeCheck'),
         btnSubmit: document.getElementById('btnSubmit'),
@@ -62,24 +102,39 @@ export function initializeCancelForm() {
     };
 
     formUi.radioButtons.forEach(rb => {
-        rb.onchange = () => handleRadioChange(rb);
+        rb.addEventListener('change', () => handleRadioChange(rb));
     });
 
     if (formUi.reasonTextarea) {
-        formUi.reasonTextarea.oninput = function () {
+        formUi.reasonTextarea.addEventListener('input', function () {
             handleTextareaInput(this.value);
-        };
+        });
     }
 
     if (formUi.agreeCheck) {
-        formUi.agreeCheck.onchange = () => updateSubmitState();
+        formUi.agreeCheck.addEventListener('change', () => updateSubmitState());
     }
 
     if (formUi.btnSubmit) {
-        formUi.btnSubmit.onclick = () => {
+        formUi.btnSubmit.addEventListener('click', (e) => {
+            e.preventDefault();
+            const textarea = getTextareaElement();
+            const reason = (formUi.reasonHidden?.value || textarea?.value || '').trim();
+
+            if (!reason || !formUi.agreeCheck?.checked) {
+                updateSubmitState();
+                return;
+            }
+
+            if (formUi.reasonHidden) {
+                formUi.reasonHidden.value = reason;
+            }
+
             cancelForm.submit();
-        };
+        });
     }
+
+    updateSubmitState();
 }
 
 export function initializeCancelReview() {

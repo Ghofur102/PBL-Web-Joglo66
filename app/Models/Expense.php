@@ -2,16 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Expense extends Model
+class Expense extends CoreDmlModel
 {
-    use HasFactory;
-    protected $connection = 'mysql_joglo66_app';
-
     protected $table = 'expenses';
 
     protected $fillable = [

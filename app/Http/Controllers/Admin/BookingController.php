@@ -13,16 +13,20 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Throwable;
+use App\Http\Requests\Admin\ExtendBookingRequest;
+use App\Services\Admin\BookingExtensionService;
 
 class BookingController extends Controller
 {
     use FieldAccessTrait;
 
     protected BookingService $bookingService;
+    protected BookingExtensionService $extensionService;
 
-    public function __construct(BookingService $bookingService)
+    public function __construct(BookingExtensionService $extensionService, BookingService $bookingService)
     {
         $this->bookingService = $bookingService;
+        $this->extensionService = $extensionService;
     }
 
     public function index(Request $request): JsonResponse
@@ -124,5 +128,34 @@ class BookingController extends Controller
         }
 
         return response()->json($data, $status);
+    }
+    
+    public function extendTime(ExtendBookingRequest $request): JsonResponse 
+    {
+        try {
+            $validated = $request->validated();
+            $extendMinutes = $validated['extend_minutes'] ?? 30;
+
+            $result = $this->extensionService->extendSessionTime(
+                (int) $validated['fk_booking_detail_id'],
+                (int) $extendMinutes
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => "Waktu bermain berhasil diperpanjang {$extendMinutes} menit.",
+                'data'    => $result,
+            ], 200);
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memperpanjang waktu bermain: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }

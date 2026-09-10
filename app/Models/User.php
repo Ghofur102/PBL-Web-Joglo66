@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use App\Models\CoreDmlModel;
 
 class User extends Authenticatable
 {
@@ -22,7 +23,7 @@ class User extends Authenticatable
         'email_verified_at',
     ];
 
-    protected $connection = 'mysql_joglo66_app';
+    protected $connection = CoreDmlModel::DML_CONNECTION;
 
     protected $hidden = [
         'password',
@@ -34,12 +35,8 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'phone_verified_at' => 'datetime',
+            'password' => 'hashed',
         ];
-    }
-
-    public function hasRestrictedFieldAccess(): bool
-    {
-        return in_array($this->role, ['worker', 'treasurer'], true);
     }
 
     public function bookings(): HasMany

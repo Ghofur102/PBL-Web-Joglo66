@@ -55,7 +55,7 @@ class ClosedBookingsController extends Controller
         } catch (Throwable $e) {
             $status = 500;
             $data = [
-                'success' => false,
+                'success' => false, 
                 'message' => 'Gagal memuat riwayat penutupan: ' . $e->getMessage()
             ];
         }

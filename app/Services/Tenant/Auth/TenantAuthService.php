@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Enums\UserRole;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Hash;
 
 class TenantAuthService
 {
@@ -26,7 +27,7 @@ class TenantAuthService
             'name'     => $data['name'],
             'email'    => $data['email'],
             'phone'    => $data['phone'],
-            'password' => $data['password'],
+            'password' => Hash::make($data['password']),
             'role'     => UserRole::TENANT->value,
         ]);
     }

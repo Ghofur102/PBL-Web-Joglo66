@@ -2,13 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class FieldPrice extends Model
+class FieldPrice extends CoreDmlModel
 {
-    protected $connection = 'mysql_joglo66_app';
-
+    use HasFactory;
     protected $table = 'field_prices';
 
     protected $fillable = [

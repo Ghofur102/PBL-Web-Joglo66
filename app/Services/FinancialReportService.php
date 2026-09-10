@@ -8,78 +8,63 @@ use App\Models\BookingAttribute;
 use App\Enums\PaymentStatus;
 use App\Enums\PaymentType;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 class FinancialReportService
 {
-    protected string $paymentDateCol;
-    protected string $expenseDateCol;
-    protected string $attributeDateCol;
-
-    public function __construct()
+    public function getMonthlyReport(int $month, int $year, array$fieldIds = []): array
     {
-        $this->paymentDateCol = 'paid_at';
-        $this->expenseDateCol = 'expense_date';
-        $this->attributeDateCol = 'transaction_date';
-    }
+        $startDate = Carbon::createFromDate($year, $month, 1)->startOfMonth()->toDateString();$endDate = Carbon::createFromDate($year,$month, 1)->endOfMonth()->toDateString();
 
-    public function getMonthlyReport(int $month, int $year, array $fieldIds = []): array
-    {
-        $startDateTime = Carbon::createFromDate($year, $month, 1)->startOfMonth()->toDateTimeString();
-        $endDateTime = Carbon::createFromDate($year, $month, 1)->endOfMonth()->endOfDay()->toDateTimeString();
+        $paymentDateCol = Schema::hasColumn('payments', 'paid_at') ? 'paid_at' : 'created_at';
+        $expenseDateCol = Schema::hasColumn('expenses', 'expense_date') ? 'expense_date' : (Schema::hasColumn('expenses', 'date') ? 'date' : 'created_at');$attributeDateCol = Schema::hasColumn('booking_attributes', 'transaction_date') ? 'transaction_date' : 'created_at';
 
         $paymentQuery = Payment::query()
             ->where('status', PaymentStatus::SUCCESS->value)
-            ->whereBetween($this->paymentDateCol, [$startDateTime, $endDateTime]);
+            ->whereBetween($paymentDateCol, [$startDate . ' 00:00:00',$endDate . ' 23:59:59']);
 
-        if (!empty($fieldIds)) {
-            $paymentQuery->whereHas('booking', function ($q) use ($fieldIds) {
-                $q->whereIn('fk_field_id', $fieldIds);
+        if (!empty($fieldIds)) {$paymentQuery->whereHas('booking', function ($q) use ($fieldIds) {
+                $q->whereIn('fk_field_id',$fieldIds);
             });
         }
 
-        $grossBookingIncome = (clone $paymentQuery)
-            ->whereIn('payment_type', [
-                PaymentType::DOWN_PAYMENT->value,
-                PaymentType::FINAL_PAYMENT->value,
-                PaymentType::RESCHEDULE_FEE->value,
-            ])->sum('amount');
+        $payments =$paymentQuery->get();
 
-        $totalRefund = (clone $paymentQuery)
-            ->where('payment_type', PaymentType::REFUND->value)
-            ->sum('amount');
+        $grossBookingIncome =$payments->whereIn('payment_type', [
+            PaymentType::DOWN_PAYMENT->value,
+            PaymentType::FINAL_PAYMENT->value,
+            PaymentType::RESCHEDULE_FEE->value,
+        ])->sum('amount');
+
+        $totalRefund =$payments->where('payment_type', PaymentType::REFUND->value)->sum('amount');
 
         $attributeQuery = BookingAttribute::query()
-            ->whereBetween($this->attributeDateCol, [$startDateTime, $endDateTime])
+            ->whereBetween($attributeDateCol, [$startDate,$endDate])
             ->whereNotIn('status', ['cancelled', 'batal', 'rejected']);
 
-        if (!empty($fieldIds)) {
-            $attributeQuery->whereHas('attribute', function ($q) use ($fieldIds) {
-                $q->whereIn('fk_field_id', $fieldIds);
+        if (!empty($fieldIds)) {$attributeQuery->whereHas('attribute', function ($q) use ($fieldIds) {
+                $q->whereIn('fk_field_id',$fieldIds);
             });
         }
 
-        $totalAttributeIncome = (clone $attributeQuery)->sum('total');
+        $attributes =$attributeQuery->get();
+        $totalAttributeIncome =$attributes->sum('total');
 
         $expenseQuery = Expense::query()
-            ->whereBetween($this->expenseDateCol, [$startDateTime, $endDateTime]);
+            ->whereBetween($expenseDateCol, [$startDate,$endDate]);
 
         if (!empty($fieldIds)) {
-            $expenseQuery->whereIn('fk_field_id', $fieldIds);
+            $expenseQuery->whereIn('fk_field_id',$fieldIds);
         }
 
-        $totalExpense = (clone $expenseQuery)
-            ->selectRaw('SUM(quantity * unit_price) as total')
-            ->value('total') ?? 0;
+        $expenses =$expenseQuery->get();
+        $totalExpense =$expenses->sum('amount');
 
-        $grossIncome = $grossBookingIncome + $totalAttributeIncome;
-        $netIncome = $grossIncome - $totalRefund;
-        $netProfit = $netIncome - $totalExpense;
+        $grossIncome = $grossBookingIncome +$totalAttributeIncome;
+        $netIncome = $grossIncome -$totalRefund;
+        $netProfit = $netIncome -$totalExpense;
 
-        $paymentsData = $paymentQuery->get();
-        $attributesData = $attributeQuery->get();
-        $expensesData = $expenseQuery->get();
-
-        $transactions = $this->buildTransactionList($paymentsData, $attributesData, $expensesData);
+        $transactions =$this->buildTransactionList($payments,$attributes, $expenses,$paymentDateCol, $attributeDateCol,$expenseDateCol);
 
         $summaryData = [
             'month'                  => $month,
@@ -99,43 +84,44 @@ class FinancialReportService
         ]);
     }
 
-    protected function buildTransactionList($payments, $attributes, $expenses): array
+    private function buildTransactionList($payments,$attributes, $expenses,$pCol, $aCol,$eCol): array
     {
-        $mappedPayments = $payments->map(function ($item) {
-            return [
-                'id'               => $item->id,
-                'transaction_date' => $item->{$this->paymentDateCol},
-                'amount'           => $item->amount,
-                'transaction_type' => 'payment',
-                'description'      => $item->payment_type,
-            ];
-        });
+        $list = [];
 
-        $mappedAttributes = $attributes->map(function ($item) {
-            return [
-                'id'               => $item->id,
-                'transaction_date' => $item->{$this->attributeDateCol},
-                'amount'           => $item->total,
-                'transaction_type' => 'attribute',
-                'description'      => $item->status,
+        foreach ($payments as$p) {
+            $isRefund =$p->payment_type === PaymentType::REFUND->value;
+            $list[] = [
+                'id'          => 'PAY-' . $p->id,
+                'title'       => $isRefund ? 'Pengembalian Dana (Refund)' : 'Pembayaran Sewa Lapangan',
+                'description' => 'Ref: ' . ($p->reference_id ?? '-'),
+                'amount'      => (int) $p->amount,
+                'type'        => $isRefund ? 'refund' : 'income',
+                'date'        => Carbon::parse($p->{$pCol})->format('Y-m-d H:i'),
             ];
-        });
+        }
 
-        $mappedExpenses = $expenses->map(function ($item) {
-            return [
-                'id'               => $item->id,
-                'transaction_date' => $item->{$this->expenseDateCol},
-                'amount'           => $item->quantity * $item->unit_price,
-                'transaction_type' => 'expense',
-                'description'      => $item->note,
+        foreach ($attributes as $a) {$list[] = [
+                'id'          => 'ATTR-' . $a->id,
+                'title'       => 'Sewa Atribut: ' . ($a->customer_name ?? 'Pelanggan'),
+                'description' => 'Jumlah: ' . $a->quantity . ' pcs (' . ucfirst($a->status) . ')',
+                'amount'      => (int) $a->total,
+                'type'        => 'income',
+                'date'        => Carbon::parse($a->{$aCol})->format('Y-m-d'),
             ];
-        });
+        }
 
-        return $mappedPayments
-            ->concat($mappedAttributes)
-            ->concat($mappedExpenses)
-            ->sortByDesc('transaction_date')
-            ->values()
-            ->toArray();
+        foreach ($expenses as $e) {$list[] = [
+                'id'          => 'EXP-' . $e->id,
+                'title'       => 'Pengeluaran: ' . ($e->category ?? 'Operasional'),
+                'description' => $e->note ?? $e->description ?? '-',
+                'amount'      => (int) $e->amount,
+                'type'        => 'expense',
+                'date'        => Carbon::parse($e->{$eCol})->format('Y-m-d'),
+            ];
+        }
+
+        usort($list, fn($a,$b) => strcmp($b['date'],$a['date']));
+
+        return $list;
     }
 }

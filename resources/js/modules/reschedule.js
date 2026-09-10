@@ -101,8 +101,23 @@ async function executeCalendarNavigation(url) {
     }
 }
 
+function getReasonValue() {
+    const el = document.getElementById('modalReason');
+    if (el) {
+        if ('value' in el && el.tagName !== 'DIV') {
+            return el.value.trim();
+        }
+        const inner = el.querySelector('textarea, input');
+        if (inner) {
+            return inner.value.trim();
+        }
+    }
+    const fallback = document.querySelector('#reasonModal textarea, #reasonModal input');
+    return fallback ? fallback.value.trim() : '';
+}
+
 function handleModalSubmission(submitBtn) {
-    const reason = ui.modalReason?.value?.trim() ?? '';
+    const reason = getReasonValue();
 
     if (!reason) {
         Swal.fire({
@@ -115,7 +130,11 @@ function handleModalSubmission(submitBtn) {
         return;
     }
 
-    if (ui.inputReason) { ui.inputReason.value = reason; }
+    const inputReason = document.getElementById('inputReason');
+    if (inputReason) { 
+        inputReason.value = reason; 
+    }
+    
     submitBtn.disabled = true;
     submitBtn.textContent = 'Memproses...';
 
@@ -138,8 +157,6 @@ export function initializeReschedule() {
         summaryTimeLabel: document.getElementById('summaryTime'),
         slotSection: slotSection,
         calendarSection: document.getElementById('calendar-section'),
-        modalReason: document.getElementById('modalReason'),
-        inputReason: document.getElementById('inputReason'),
         reasonModal: document.getElementById('reasonModal')
     };
 
@@ -157,6 +174,12 @@ export function initializeReschedule() {
         ui.btnConfirm.onclick = () => {
             if (selectedBooking) {
                 ui.reasonModal?.classList?.replace('hidden', 'flex');
+                setTimeout(() => {
+                    const textarea = document.getElementById('modalReason');
+                    if (textarea && 'focus' in textarea) {
+                        textarea.focus();
+                    }
+                }, 50);
             }
         };
     }
@@ -165,6 +188,14 @@ export function initializeReschedule() {
     if (modalCancel) {
         modalCancel.onclick = () => {
             ui.reasonModal?.classList?.replace('flex', 'hidden');
+        };
+    }
+
+    if (ui.reasonModal) {
+        ui.reasonModal.onclick = (e) => {
+            if (e.target === ui.reasonModal) {
+                ui.reasonModal.classList.replace('flex', 'hidden');
+            }
         };
     }
 

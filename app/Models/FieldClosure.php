@@ -2,14 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class FieldClosure extends Model
+class FieldClosure extends CoreDmlModel
 {
-    protected $connection = 'mysql_joglo66_app';
-
     protected $table = 'field_closures';
 
     protected $fillable = [

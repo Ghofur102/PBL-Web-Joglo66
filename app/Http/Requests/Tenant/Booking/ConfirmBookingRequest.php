@@ -15,7 +15,7 @@ class ConfirmBookingRequest extends FormRequest
     {
         return [
             'field_id'       => ['required', 'exists:mysql_joglo66_app.fields,id'],
-            'selected_slots' => ['required', 'string'], // JSON String dari slot yang dipilih
+            'selected_slots' => ['required', 'json', 'string'],
         ];
     }
 }

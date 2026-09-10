@@ -22,30 +22,36 @@ class ReportController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $status = 200;
+        $data = [];
+
         try {
             $user = $request->user();
             $fieldIds = [];
 
-            if ($user && $user->hasRestrictedFieldAccess()) {
+            if ($user && $user->role === 'worker') {
                 $fieldIds = $this->getAccessibleFieldIds($user);
             }
 
-            $month = (int) ($request->month ?? now()->month);
-            $year = (int) ($request->year ?? now()->year);
+            $month = (int) ($request->month ?? date('m'));
+            $year = (int) ($request->year ?? date('Y'));
 
             $reportData = $this->reportService->getMonthlyReport($month, $year, $fieldIds);
 
-            return response()->json([
+            $data = [
                 'success' => true,
                 'message' => 'Laporan kas bulanan berhasil diambil.',
                 'data'    => $reportData,
-            ], 200);
+            ];
         } catch (Throwable $e) {
             Log::error('Laporan Bulanan Error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
-            return response()->json([
+            $status = 500;
+            $data = [
                 'success' => false,
                 'message' => 'Gagal memuat laporan kas: ' . $e->getMessage(),
-            ], 500);
+            ];
         }
+
+        return response()->json($data, $status);
     }
 }

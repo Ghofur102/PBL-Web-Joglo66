@@ -2,15 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Field extends Model
+class Field extends CoreDmlModel
 {
     use HasFactory;
-
-    protected $connection = 'mysql_joglo66_app';
 
     protected $table = 'fields';
 

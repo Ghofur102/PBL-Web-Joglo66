@@ -2,15 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Attribute extends Model
+class Attribute extends CoreDmlModel
 {
-    use HasFactory;
-    protected $connection = 'mysql_joglo66_app';
-
     protected $table = 'attributes';
 
     protected $fillable = [

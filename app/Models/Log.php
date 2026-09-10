@@ -2,14 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Log extends Model
+class Log extends CoreDmlModel
 {
     public $timestamps = false;
-
-    protected $connection = 'mysql_joglo66_app';
 
     protected $table = 'logs';
 

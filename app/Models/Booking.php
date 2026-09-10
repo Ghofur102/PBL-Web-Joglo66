@@ -2,15 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-class Booking extends Model
+class Booking extends CoreDmlModel
 {
     use HasFactory;
-    protected $connection = 'mysql_joglo66_app';
 
     protected $table = 'bookings';
 

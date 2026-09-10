@@ -11,14 +11,19 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('booking_details', function (Blueprint $table) {
+        Schema::create('booking_attributes', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('fk_booking_id')->constrained('bookings')->onDelete('cascade');
-            $table->time('start_play_time');
-            $table->time('end_play_time');
-            $table->date('play_date');
-            $table->unsignedBigInteger('price');
-            $table->enum('status', ['active', 'waiting', 'finish', 'cancelled', 'reschedule', 'field closure', 'closed field cancelled', 'closed field reschedule'])->default("waiting");
+            $table->foreignId('fk_booking_detail_id')->constrained('booking_details')->onDelete('cascade');
+            $table->foreignId('fk_attribute_id')->constrained('attributes');
+            $table->unsignedInteger('quantity');
+            $table->unsignedInteger('price');
+            $table->unsignedInteger('total');
+            $table->enum('status', ['dipinjam', 'dikembalikan', 'terlambat'])->default('dipinjam');
+            $table->text('reason')->nullable();
+            $table->string('customer_name', 100);
+            $table->string('customer_phone', 20)->nullable();
+            $table->integer('duration_hours');
+            $table->date('transaction_date');
             $table->timestamps();
         });
     }
@@ -28,6 +33,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('booking_details');
+        Schema::dropIfExists('booking_attributes');
     }
 };

@@ -20,9 +20,8 @@ use App\Http\Controllers\Owner\EmployeeController;
 use App\Http\Controllers\Owner\OwnerFieldController;
 use App\Http\Controllers\Owner\DownloadReportController;
 
-if (!defined('ROUTE_LOGOUT')) {
-    define('ROUTE_LOGOUT', '/logout');
-}
+const ROUTE_LOGOUT = '/logout';
+
 Route::post('/duitku/callback', [DuitkuController::class, 'callback']);
 
 Route::get('/hello', function () {
@@ -46,6 +45,7 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'check.field.admin'])->group
     Route::get('/list-booking', [BookingController::class, 'index']);
     Route::post('/create-booking', [BookingController::class, 'store']);
     Route::get('/detail-booking/{detail_booking_id}', [BookingController::class, 'show']);
+    Route::post('/extend-booking-time', [BookingController::class, 'extendTime']);
 
     Route::post('/reschedule-booking/{detail_booking_id}', RescheduleController::class);
     Route::post('/cancel-booking/{detail_booking_id}', CancelController::class);

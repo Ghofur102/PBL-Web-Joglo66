@@ -2,16 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
-class BookingDetail extends Model
+class BookingDetail extends CoreDmlModel
 {
-    use HasFactory;
-    protected $connection = 'mysql_joglo66_app';
-
     protected $table = 'booking_details';
 
     protected $fillable = [
@@ -31,5 +27,20 @@ class BookingDetail extends Model
     public function attributes(): HasMany
     {
         return $this->hasMany(BookingAttribute::class, 'fk_booking_detail_id', 'id');
+    }
+    
+    public function payment(): HasMany
+    {
+        return $this->hasMany(Payment::class, 'fk_booking_detail_id', 'id');
+    }
+    
+    public function reschedules(): HasMany
+    {
+        return $this->hasMany(BookingReschedule::class, 'fk_booking_detail_id', 'id')->latest();
+    }
+    
+    public function cancellation(): HasOne
+    {
+        return $this->hasOne(BookingCancelled::class, 'fk_booking_detail_id', 'id');
     }
 }

@@ -2,13 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class FieldWorker extends Model
+class FieldWorker extends CoreDmlModel
 {
-    protected $connection = 'mysql_joglo66_app';
-
     protected $table = 'field_workers';
 
     protected $fillable = [
