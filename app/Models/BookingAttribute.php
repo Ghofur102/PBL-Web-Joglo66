@@ -14,6 +14,7 @@ class BookingAttribute extends CoreDmlModel
         'quantity',
         'price',
         'total',
+        'reason',
         'transaction_date',
         'status',
         'customer_name',

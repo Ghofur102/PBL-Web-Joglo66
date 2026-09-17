@@ -28,17 +28,17 @@ class BookingDetail extends CoreDmlModel
     {
         return $this->hasMany(BookingAttribute::class, 'fk_booking_detail_id', 'id');
     }
-    
+
     public function payment(): HasMany
     {
         return $this->hasMany(Payment::class, 'fk_booking_detail_id', 'id');
     }
-    
+
     public function reschedules(): HasMany
     {
         return $this->hasMany(BookingReschedule::class, 'fk_booking_detail_id', 'id')->latest();
     }
-    
+
     public function cancellation(): HasOne
     {
         return $this->hasOne(BookingCancelled::class, 'fk_booking_detail_id', 'id');
