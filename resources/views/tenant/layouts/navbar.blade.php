@@ -9,6 +9,18 @@
             <div class="hidden md:flex md:items-center md:space-x-4">
                 <a href="{{ route('tenant.booking.dashboard') }}" class="text-white hover:bg-primary-dark px-3 py-2 rounded-tenant-md text-sm font-medium transition">Booking Lapangan</a>
                 <a href="{{ route('tenant.booking.transaction') }}" class="text-white hover:bg-primary-dark px-3 py-2 rounded-tenant-md text-sm font-medium transition">Riwayat Transaksi</a>
+
+                <a href="{{ route('tenant.notifications.index') }}" class="relative text-white hover:bg-primary-dark p-2 rounded-tenant-md transition" aria-label="Notifikasi">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+                    </svg>
+                    @if(auth()->check() && auth()->user()->unreadNotifications->count() > 0)
+                        <span class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                            {{ auth()->user()->unreadNotifications->count() > 99 ? '99+' : auth()->user()->unreadNotifications->count() }}
+                        </span>
+                    @endif
+                </a>
+
                 <a href="{{ route('profile.show') }}" class="text-white hover:bg-primary-dark px-3 py-2 rounded-tenant-md text-sm font-medium transition">Profil</a>
 
                 <form action="{{ route('logout') }}" method="POST" class="inline">
@@ -17,7 +29,18 @@
                 </form>
             </div>
 
-            <div class="flex items-center md:hidden">
+            <div class="flex items-center space-x-2 md:hidden">
+                <a href="{{ route('tenant.notifications.index') }}" class="relative text-white p-2 rounded-tenant-md hover:bg-primary-dark transition">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+                    </svg>
+                    @if(auth()->check() && auth()->user()->unreadNotifications->count() > 0)
+                        <span class="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                            {{ auth()->user()->unreadNotifications->count() > 99 ? '99+' : auth()->user()->unreadNotifications->count() }}
+                        </span>
+                    @endif
+                </a>
+
                 <button type="button" id="mobile-menu-button" class="inline-flex items-center justify-center p-2 rounded-tenant-md text-white hover:bg-primary-dark focus:outline-none transition" aria-controls="mobile-menu" aria-expanded="false">
                     <span class="sr-only">Menu Utama</span>
                     <svg class="block h-6 w-6" id="icon-menu-closed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">

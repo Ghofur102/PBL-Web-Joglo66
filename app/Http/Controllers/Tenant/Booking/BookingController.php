@@ -77,7 +77,6 @@ class BookingController extends Controller
                     ->with('error', 'Salah satu slot jam pilihan Anda baru saja diproses oleh orang lain. Silakan pilih slot waktu yang lain.');
             } else {
                 try {
-                    // 2. Eksekusi transaksi dengan memberikan TEPAT 5 parameter sesuai kontrak Service
                     $result = $this->bookingService->processBookingTransaction(
                         (int)$userId,
                         $user,
@@ -89,8 +88,6 @@ class BookingController extends Controller
                     $booking = $result['booking'];
                     $this->clearBookingCache((int)$fieldId, $groupedSlots);
 
-                    // 3. SOLUSI ANTI-ERROR: Tarik data payment langsung dari database
-                    // karena Service hanya mengembalikan objek 'booking'
                     $payment = \App\Models\Payment::query()->where('fk_booking_id', $booking->id)->first();
 
                     $response = view('tenant.booking.checkout', [

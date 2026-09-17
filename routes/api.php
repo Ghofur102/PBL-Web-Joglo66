@@ -9,7 +9,8 @@ use App\Http\Controllers\Admin\CancelController;
 use App\Http\Controllers\Admin\ClosedBookingsController;
 use App\Http\Controllers\Admin\RefundOverpaymentController;
 use App\Http\Controllers\Admin\PaymentController;
-use App\Http\Controllers\Admin\AuthController;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Tenant\Payment\DuitkuController;
 use App\Http\Controllers\Admin\AttributeController;
 use App\Http\Controllers\Admin\AttributeRentalController;
@@ -36,6 +37,11 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'check.field.admin'])->group
     Route::get('/dashboard', [DashboardController::class, 'dashboard']);
     Route::get('/profile', [AuthController::class, 'profile']);
 
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+
     Route::get('/list-field', [FieldController::class, 'index']);
     Route::get('/detail-field/{field_id}', [FieldController::class, 'show']);
     Route::post('/update-field', [FieldController::class, 'update']);
@@ -48,7 +54,13 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'check.field.admin'])->group
     Route::post('/extend-booking-time', [BookingController::class, 'extendTime']);
 
     Route::post('/reschedule-booking/{detail_booking_id}', RescheduleController::class);
+    Route::post('/reschedule-booking/{detail_booking_id}/approve', [RescheduleController::class, 'approve']);
+    Route::post('/reschedule-booking/{detail_booking_id}/reject', [RescheduleController::class, 'reject']);
+
     Route::post('/cancel-booking/{detail_booking_id}', CancelController::class);
+    Route::post('/cancel-booking/{detail_booking_id}/approve', [CancelController::class, 'approve']);
+    Route::post('/cancel-booking/{detail_booking_id}/reject', [CancelController::class, 'reject']);
+
     Route::get('/list-close-booking', ClosedBookingsController::class);
     Route::post('/refund-overpayment/{id}', RefundOverpaymentController::class);
 
@@ -83,6 +95,11 @@ Route::prefix('treasurer')->middleware(['auth:sanctum'])->group(function () {
 });
 
 Route::prefix('owner')->middleware(['auth:sanctum'])->group(function () {
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+
     Route::get('/karyawan', [EmployeeController::class, 'index']);
     Route::post('/karyawan', [EmployeeController::class, 'store']);
     Route::post('/karyawan/{id}/update', [EmployeeController::class, 'update']);
@@ -99,5 +116,5 @@ Route::prefix('owner')->middleware(['auth:sanctum'])->group(function () {
 Route::get('/laporan-bulanan', [ReportController::class, 'index'])->middleware('auth:sanctum');
 
 Route::get('/owner/laporan-pdf/download', [DownloadReportController::class, 'download'])
-        ->name('owner.laporan.download')
-        ->middleware('signed');
+    ->name('owner.laporan.download')
+    ->middleware('signed');

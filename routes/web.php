@@ -1,16 +1,17 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Tenant\Auth\AuthController;
-use App\Http\Controllers\Tenant\Auth\RegisterController;
 use App\Http\Controllers\Tenant\Auth\ProfileController;
+use App\Http\Controllers\Tenant\Auth\RegisterController;
 use App\Http\Controllers\Tenant\Booking\BookingController;
-use App\Http\Controllers\Tenant\DashboardController;
-use App\Http\Controllers\Tenant\Booking\ScheduleController;
-use App\Http\Controllers\Tenant\Booking\RescheduleDetailBookingController;
 use App\Http\Controllers\Tenant\Booking\CancelledDetailBookingController;
 use App\Http\Controllers\Tenant\Booking\HistoryController;
+use App\Http\Controllers\Tenant\Booking\RescheduleDetailBookingController;
+use App\Http\Controllers\Tenant\Booking\ScheduleController;
+use App\Http\Controllers\Tenant\DashboardController;
 use App\Http\Middleware\CheckTenantRole;
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Tenant\NotificationController;
 
 // Pengalihan Halaman Utama ke Dashboard Tenant
 Route::get('/', function () {
@@ -55,5 +56,9 @@ Route::middleware('auth')->group(function () {
             Route::post('/confirmation-cancelled', [CancelledDetailBookingController::class, 'confirmation'])->name('tenant.booking.confirmation.cancelled');
             Route::post('/process-cancelled', [CancelledDetailBookingController::class, 'process'])->name('tenant.booking.process.cancelled');
         });
+
+        Route::get('/notifications', [NotificationController::class, 'index'])->name('tenant.notifications.index');
+        Route::get('/notifications/{id}/read', [NotificationController::class, 'read'])->name('tenant.notifications.read');
+        Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])->name('tenant.notifications.readAll');
     });
 });

@@ -18,6 +18,9 @@ return new class extends Migration
             $table->timestamp('cancle_date');
             $table->enum('status_refund', ['None', 'Full', 'Partial'])->default('None');
             $table->text('reason')->nullable();
+            $table->enum('approval_status', ['pending', 'approved', 'rejected'])->default('approved')->after('status_refund');
+            $table->enum('sender_by', ['admin', 'tenant'])->default('admin')->after('approval_status');
+            $table->text('rejection_reason')->nullable()->after('sender_by');
             $table->timestamps();
         });
     }

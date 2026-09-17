@@ -39,6 +39,11 @@ class User extends Authenticatable
         ];
     }
 
+    public function fields(): HasMany
+    {
+        return $this->hasMany(Field::class, 'fk_user_id', 'id');
+    }
+
     public function bookings(): HasMany
     {
         return $this->hasMany(Booking::class, 'fk_user_id', 'id');

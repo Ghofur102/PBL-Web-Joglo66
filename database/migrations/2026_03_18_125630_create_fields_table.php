@@ -17,6 +17,10 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->string('image_url', 255)->nullable();
             $table->enum('category', ['futsal', 'mini soccer'])->index();
+            $table->unsignedTinyInteger('min_cancel_days')->default(3);
+            $table->unsignedTinyInteger('min_reschedule_days')->default(3);
+            $table->unsignedTinyInteger('max_reschedule_times')->default(1);
+            $table->foreignId('fk_user_id')->constrained('users')->onDelete('cascade');
             $table->timestamps();
         });
     }

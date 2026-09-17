@@ -9,7 +9,14 @@ class BookingCancelled extends CoreDmlModel
     protected $table = 'booking_cancelled';
 
     protected $fillable = [
-        'fk_booking_detail_id', 'fk_field_closure_id', 'reason', 'cancle_date', 'status_refund', 'reason'
+        'fk_booking_detail_id',
+        'fk_field_closure_id',
+        'cancle_date',
+        'reason',
+        'status_refund',
+        'approval_status',
+        'sender_by',
+        'rejection_reason',
     ];
 
     public function bookingDetail(): BelongsTo

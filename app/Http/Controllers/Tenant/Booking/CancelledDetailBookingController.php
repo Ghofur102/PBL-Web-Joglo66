@@ -59,7 +59,7 @@ class CancelledDetailBookingController extends Controller
             $this->cancelService->processCancellation($detail, $validated['reason']);
 
             Cache::forget("tenant_nearest_bookings_field_{$request->field_id}");
-            
+
             $response = redirect()->route('tenant.booking.history.show', $detail->fk_booking_id)
                 ->with('success', 'Booking berhasil dibatalkan.');
         } catch (Throwable $e) {

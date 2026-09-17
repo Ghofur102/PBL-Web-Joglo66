@@ -8,12 +8,16 @@ use App\Enums\PaymentStatus;
 use App\Enums\PaymentType;
 use App\Models\BookingCancelled;
 use App\Models\BookingDetail;
+use App\Models\FieldWorker;
 use App\Models\Payment;
+use App\Models\User;
+use App\Notifications\GeneralBookingNotification;
 use Carbon\Carbon;
 use DomainException;
 use UnexpectedValueException;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Notification;
 
 class TenantCancelBookingService
 {
@@ -21,16 +25,20 @@ class TenantCancelBookingService
 
     public function getCancellationData(BookingDetail $detail): array
     {
+        $field = $detail->booking->field;
+        $minCancelDays = (int) ($field->min_cancel_days ?? 3);
+
         $playDate = Carbon::parse($detail->play_date)->startOfDay();
         $daysUntilPlay = Carbon::now()->startOfDay()->diffInDays($playDate, false);
         $netPaid = $this->calculatePaymentTotals($detail);
 
-        $isRefundable = $daysUntilPlay >= 3;
+        $isRefundable = $daysUntilPlay >= $minCancelDays;
         $refundAmount = $isRefundable ? $netPaid : 0;
 
         return [
             'playDate'      => $playDate,
             'daysUntilPlay' => $daysUntilPlay,
+            'minCancelDays' => $minCancelDays,
             'netPaid'       => $netPaid,
             'isRefundable'  => $isRefundable,
             'refundAmount'  => $refundAmount,
@@ -47,15 +55,19 @@ class TenantCancelBookingService
             throw new DomainException('Booking ini sudah dibatalkan sebelumnya.');
         }
 
+        $existingPending = BookingCancelled::where('fk_booking_detail_id', $detail->id)
+            ->where('approval_status', 'pending')
+            ->exists();
+
+        if ($existingPending) {
+            throw new DomainException('Pengajuan pembatalan untuk booking ini sedang menunggu persetujuan.');
+        }
+
         $cancellationData = $this->getCancellationData($detail);
+        $tenantUser = Auth::user();
+        $field = $detail->booking->field;
 
-        DB::connection(self::DB_CONNECTION)->transaction(function () use ($detail, $reason, $cancellationData) {
-
-            Payment::query()
-                ->where('fk_booking_detail_id', $detail->id)
-                ->where('status', PaymentStatus::PENDING->value)
-                ->update(['status' => PaymentStatus::FAILED->value]);
-
+        DB::connection(self::DB_CONNECTION)->transaction(function () use ($detail, $reason, $cancellationData, $tenantUser, $field) {
             BookingCancelled::create([
                 'fk_booking_detail_id' => $detail->id,
                 'cancle_date'          => now()->toDateString(),
@@ -63,21 +75,42 @@ class TenantCancelBookingService
                 'status_refund'        => $cancellationData['isRefundable']
                     ? CancelRefundStatus::FULL->value
                     : CancelRefundStatus::NONE->value,
+                'approval_status'      => 'pending',
+                'sender_by'            => 'tenant',
             ]);
 
-            $detail->update(['status' => BookingDetailStatus::CANCELLED->value]);
+            $workerUserIds = FieldWorker::query()
+                ->where('fk_field_id', $field->id)
+                ->pluck('fk_user_id');
 
-            if ($cancellationData['isRefundable'] && $cancellationData['refundAmount'] > 0) {
-                Payment::create([
-                    'fk_booking_id'        => $detail->fk_booking_id,
-                    'fk_booking_detail_id' => $detail->id,
-                    'reference_id'         => 'CNL-REF-' . Str::upper(Str::random(10)),
-                    'payment_type'         => PaymentType::REFUND->value,
-                    'method'               => 'cash',
-                    'amount'               => $cancellationData['refundAmount'],
-                    'status'               => PaymentStatus::SUCCESS->value,
-                    'paid_at'              => now(),
-                ]);
+            $workers = User::whereIn('id', $workerUserIds)->get();
+            if ($workers->isNotEmpty()) {
+                Notification::send($workers, new GeneralBookingNotification([
+                    'title'       => 'Pengajuan Pembatalan Booking',
+                    'message'     => "Penyewa {$tenantUser->name} mengajukan pembatalan booking #{$detail->fk_booking_id}. Alasan: {$reason}",
+                    'type'        => 'cancel_request',
+                    'booking_id'  => $detail->fk_booking_id,
+                    'url'         => "/admin/detail-booking/{$detail->fk_booking_id}",
+                    'sender_id'   => $tenantUser->id,
+                    'sender_name' => $tenantUser->name,
+                    'sender_role' => 'tenant',
+                ]));
+            }
+
+            if ($field->fk_user_id) {
+                $owner = User::find($field->fk_user_id);
+                if ($owner) {
+                    $owner->notify(new GeneralBookingNotification([
+                        'title'       => 'Info Pengajuan Pembatalan',
+                        'message'     => "Penyewa {$tenantUser->name} mengajukan pembatalan booking #{$detail->fk_booking_id} pada {$field->name}.",
+                        'type'        => 'cancel_info',
+                        'booking_id'  => $detail->fk_booking_id,
+                        'url'         => "/owner/detail-booking/{$detail->fk_booking_id}",
+                        'sender_id'   => $tenantUser->id,
+                        'sender_name' => $tenantUser->name,
+                        'sender_role' => 'tenant',
+                    ]));
+                }
             }
         });
     }

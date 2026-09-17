@@ -3,17 +3,19 @@
 namespace App\Services\Tenant\Booking;
 
 use App\Enums\BookingDetailStatus;
-use App\Enums\PaymentStatus;
-use App\Enums\PaymentType;
 use App\Models\BookingDetail;
 use App\Models\BookingReschedule;
 use App\Models\FieldPrice;
-use App\Models\Payment;
+use App\Models\FieldWorker;
+use App\Models\User;
+use App\Notifications\GeneralBookingNotification;
 use Carbon\Carbon;
+use DomainException;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 use UnexpectedValueException;
 
 class TenantRescheduleService
@@ -49,59 +51,92 @@ class TenantRescheduleService
 
     public function executeReschedule(BookingDetail $detail, array $validated): void
     {
-        $review = $this->validateAndPrepareReview($detail, $validated);
+        $existingPending = BookingReschedule::where('fk_booking_detail_id', $detail->id)
+            ->where('approval_status', 'pending')
+            ->exists();
 
-        DB::connection(self::DB_CONN)->transaction(function () use ($detail, $validated, $review) {
+        if ($existingPending) {
+            throw new DomainException('Pengajuan reschedule untuk booking ini sedang menunggu persetujuan admin.');
+        }
+
+        $review = $this->validateAndPrepareReview($detail, $validated);
+        $tenantUser = Auth::user();
+        $field = $detail->booking->field;
+
+        DB::connection(self::DB_CONN)->transaction(function () use ($detail, $validated, $review, $tenantUser, $field) {
             BookingReschedule::create([
                 'fk_booking_detail_id' => $detail->id,
                 'old_date'             => $detail->play_date,
+                'new_play_date'        => $validated['new_play_date'],
+                'new_start_play_time'  => $validated['new_start_play_time'],
+                'new_end_play_time'    => $validated['new_end_play_time'],
+                'new_price'            => $review['newPrice'],
                 'status_refund'        => $this->determineStatusRefund($review['priceDiff']),
                 'reason'               => $validated['reason'],
+                'approval_status'      => 'pending',
+                'sender_by'            => 'tenant',
             ]);
 
-            $detail->update([
-                'play_date'       => $validated['new_play_date'],
-                'start_play_time' => $validated['new_start_play_time'],
-                'end_play_time'   => $validated['new_end_play_time'],
-                'price'           => $review['newPrice'],
-                'status'          => BookingDetailStatus::RESCHEDULE->value,
-            ]);
+            $workerUserIds = FieldWorker::query()
+                ->where('fk_field_id', $field->id)
+                ->pluck('fk_user_id');
 
-            if ($review['priceDiff'] !== 0) {
-                $isFeeRequired = $review['priceDiff'] > 0;
-                $prefix = $isFeeRequired ? 'RSCH-' : 'REF-';
-                $payType = $isFeeRequired ? PaymentType::RESCHEDULE_FEE->value : PaymentType::REFUND->value;
+            $workers = User::whereIn('id', $workerUserIds)->get();
+            if ($workers->isNotEmpty()) {
+                Notification::send($workers, new GeneralBookingNotification([
+                    'title'       => 'Pengajuan Reschedule Jadwal',
+                    'message'     => "Penyewa {$tenantUser->name} mengajukan pindah jadwal booking #{$detail->fk_booking_id} ke tanggal {$validated['new_play_date']} pukul {$validated['new_start_play_time']}.",
+                    'type'        => 'reschedule_request',
+                    'booking_id'  => $detail->fk_booking_id,
+                    'url'         => "/admin/detail-booking/{$detail->fk_booking_id}",
+                    'sender_id'   => $tenantUser->id,
+                    'sender_name' => $tenantUser->name,
+                    'sender_role' => 'tenant',
+                ]));
+            }
 
-                Payment::create([
-                    'fk_booking_id'        => $detail->fk_booking_id,
-                    'fk_booking_detail_id' => $detail->id,
-                    'reference_id'         => $prefix . Str::upper(Str::random(10)),
-                    'payment_type'         => $payType,
-                    'method'               => 'cash',
-                    'amount'               => abs($review['priceDiff']),
-                    'status'               => PaymentStatus::PENDING->value,
-                    'paid_at'              => null,
-                ]);
+            if ($field->fk_user_id) {
+                $owner = User::find($field->fk_user_id);
+                if ($owner) {
+                    $owner->notify(new GeneralBookingNotification([
+                        'title'       => 'Info Pengajuan Reschedule',
+                        'message'     => "Penyewa {$tenantUser->name} mengajukan reschedule booking #{$detail->fk_booking_id} pada {$field->name}.",
+                        'type'        => 'reschedule_info',
+                        'booking_id'  => $detail->fk_booking_id,
+                        'url'         => "/owner/detail-booking/{$detail->fk_booking_id}",
+                        'sender_id'   => $tenantUser->id,
+                        'sender_name' => $tenantUser->name,
+                        'sender_role' => 'tenant',
+                    ]));
+                }
             }
         });
     }
 
     public function checkRescheduleRules(BookingDetail $detail): void
     {
+        $field = $detail->booking->field;
+        $minRescheduleDays = (int) ($field->min_reschedule_days ?? 3);
+        $maxRescheduleTimes = (int) ($field->max_reschedule_times ?? 1);
+
         $playDate = Carbon::parse($detail->play_date)->startOfDay();
         $daysUntilPlay = Carbon::now()->startOfDay()->diffInDays($playDate, false);
 
-        if ($daysUntilPlay < 3) {
-            throw new UnexpectedValueException('Reschedule hanya bisa dilakukan minimal H-3 sebelum jadwal bermain.');
+        if ($daysUntilPlay < $minRescheduleDays) {
+            throw new UnexpectedValueException("Reschedule hanya bisa dilakukan minimal H-{$minRescheduleDays} sebelum jadwal bermain.");
         }
 
         if (strtolower($detail->status) === 'waiting') {
             throw new UnexpectedValueException('Fitur reschedule tidak tersedia. Silakan selesaikan pembayaran terlebih dahulu.');
         }
 
-        $alreadyRescheduled = BookingReschedule::query()->where('fk_booking_detail_id', $detail->id)->exists();
-        if ($alreadyRescheduled) {
-            throw new UnexpectedValueException('Reschedule hanya dapat dilakukan 1 kali.');
+        $rescheduleCount = BookingReschedule::query()
+            ->where('fk_booking_detail_id', $detail->id)
+            ->where('approval_status', 'approved')
+            ->count();
+
+        if ($rescheduleCount >= $maxRescheduleTimes) {
+            throw new UnexpectedValueException("Reschedule maksimal dapat dilakukan {$maxRescheduleTimes} kali.");
         }
     }
 
@@ -159,7 +194,7 @@ class TenantRescheduleService
             ->where('end_time', '>=', $newSlot['new_end_play_time'])
             ->value('price');
 
-        if (! $price) {
+        if (!$price) {
             throw new UnexpectedValueException('Harga untuk jadwal baru tidak ditemukan.');
         }
 
@@ -189,7 +224,7 @@ class TenantRescheduleService
                 'day'            => (int) $current->format('j'),
                 'isCurrentMonth' => $current->month === $month,
                 'isToday'        => $current->isToday(),
-                'isPast'         => $current->isPast() && ! $current->isToday(),
+                'isPast'         => $current->isPast() && !$current->isToday(),
             ];
         }
 
@@ -251,7 +286,7 @@ class TenantRescheduleService
                     'start'        => $current->format('H:i'),
                     'end'          => $current->copy()->addHour()->format('H:i'),
                     'price'        => $rule->price,
-                    'is_available' => ! $isOccupiedByOther && ! $isClosed && ! $isOriginalSlot,
+                    'is_available' => !$isOccupiedByOther && !$isClosed && !$isOriginalSlot,
                     'is_original'  => $isOriginalSlot,
                     'is_closed'    => $isClosed,
                 ];

@@ -24,11 +24,14 @@ class GeneralBookingNotification extends Notification
     public function toArray(object $notifiable): array
     {
         return [
-            'title'      => $this->payload['title'] ?? 'Pemberitahuan',
-            'message'    => $this->payload['message'] ?? '',
-            'type'       => $this->payload['type'] ?? 'info',
+            'title' => $this->payload['title'] ?? 'Pemberitahuan',
+            'message' => $this->payload['message'] ?? '',
+            'type' => $this->payload['type'] ?? 'info',
             'booking_id' => $this->payload['booking_id'] ?? null,
-            'url'        => $this->payload['url'] ?? null,
+            'url' => $this->payload['url'] ?? null,
+            'sender_id' => $this->payload['sender_id'] ?? null,
+            'sender_name' => $this->payload['sender_name'] ?? 'Sistem',
+            'sender_role' => $this->payload['sender_role'] ?? 'system',
             'created_at' => now()->toDateTimeString(),
         ];
     }

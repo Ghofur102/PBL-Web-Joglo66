@@ -2,8 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Field extends CoreDmlModel
 {
@@ -12,8 +13,25 @@ class Field extends CoreDmlModel
     protected $table = 'fields';
 
     protected $fillable = [
-        'name', 'description', 'image_url', 'category'
+        'name',
+        'description',
+        'image_url',
+        'category',
+        'fk_user_id',
+        'min_cancel_days',
+        'min_reschedule_days',
+        'max_reschedule_times',
     ];
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'fk_user_id', 'id');
+    }
+
+    public function owner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'fk_user_id', 'id');
+    }
 
     public function fieldPrices(): HasMany
     {
@@ -40,8 +58,8 @@ class Field extends CoreDmlModel
         return $this->hasMany(FinancialReport::class, 'fk_field_id', 'id');
     }
 
-    public function fieldAdmin(): HasMany
+    public function fieldWorkers(): HasMany
     {
-        return $this->hasMany(FieldAdmin::class, 'fk_field_id', 'id');
+        return $this->hasMany(FieldWorker::class, 'fk_field_id', 'id');
     }
 }

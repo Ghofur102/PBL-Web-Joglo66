@@ -18,6 +18,13 @@ return new class extends Migration
             $table->date('old_date');
             $table->enum('status_refund', ['none', 'deposit required', 'refund required']);
             $table->text('reason')->nullable();
+            $table->enum('approval_status', ['pending', 'approved', 'rejected'])->default('approved')->after('status_refund');
+            $table->enum('sender_by', ['admin', 'tenant'])->default('admin')->after('approval_status');
+            $table->text('rejection_reason')->nullable()->after('sender_by');
+            $table->date('new_play_date')->nullable()->after('old_date');
+            $table->time('new_start_play_time')->nullable()->after('new_play_date');
+            $table->time('new_end_play_time')->nullable()->after('new_start_play_time');
+            $table->integer('new_price')->nullable()->after('new_end_play_time');
             $table->timestamps();
         });
     }
