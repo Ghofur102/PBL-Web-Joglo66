@@ -35,7 +35,7 @@ class TenantHistoryService
             ->with(['payments', 'details.attributes'])
             ->where('fk_user_id', $userId);
 
-        if (! empty($filters['search'])) {
+        if (!empty($filters['search'])) {
             $search = $filters['search'];
             $query->where(function ($q) use ($search) {
                 /** @var Builder $q */
@@ -47,11 +47,11 @@ class TenantHistoryService
             });
         }
 
-        if (! empty($filters['date'])) {
+        if (!empty($filters['date'])) {
             $query->whereDate('booking_date', $filters['date']);
         }
 
-        if (! empty($filters['status'])) {
+        if (!empty($filters['status'])) {
             $status = $filters['status'];
             $query->whereHas('payments', function ($q) use ($status) {
                 /** @var Builder $q */
@@ -85,10 +85,26 @@ class TenantHistoryService
 
         $this->appendFinancialSummary($booking);
 
+        $field = $booking->field;
+        $minCancelDays = (int) ($field->min_cancel_days ?? 3);
+        $minRescheduleDays = (int) ($field->min_reschedule_days ?? 3);
+        $maxRescheduleTimes = (int) ($field->max_reschedule_times ?? 1);
+
+        $globalPaidPerSession = $this->calculateGlobalPaidPerSession($booking);
+
+        $booking->details->transform(function ($detail) use ($globalPaidPerSession, $minCancelDays, $minRescheduleDays, $maxRescheduleTimes) {
+            return $this->hydrateDetailItem($detail, $globalPaidPerSession, $minCancelDays, $minRescheduleDays, $maxRescheduleTimes);
+        });
+
+        return $booking;
+    }
+
+    private function calculateGlobalPaidPerSession(Booking $booking): int
+    {
         $totalSessions = max(1, $booking->details->count());
         $allSuccessfulPayments = $booking->payments->where('status', PaymentStatus::SUCCESS->value);
 
-        $globalPaidPerSession = (int) round(
+        return (int) round(
             $allSuccessfulPayments->whereNull('fk_booking_detail_id')
                 ->whereIn(self::COL_PAYMENT_TYPE, [
                     PaymentType::DOWN_PAYMENT->value,
@@ -96,92 +112,184 @@ class TenantHistoryService
                 ])
                 ->sum('amount') / $totalSessions
         );
+    }
 
-        $booking->details->transform(function ($detail) use ($globalPaidPerSession) {
-            /** @var BookingDetail $detail */
-            $detailPayments = $detail->payment instanceof Collection
-                ? $detail->payment
-                : ($detail->payment ? collect([$detail->payment]) : collect());
+    private function hydrateDetailItem(
+        BookingDetail $detail,
+        int $globalPaidPerSession,
+        int $minCancelDays,
+        int $minRescheduleDays,
+        int $maxRescheduleTimes
+    ): BookingDetail {
+        $detailPayments = $this->resolveDetailPayments($detail);
+        $latestPayment = $detailPayments->sortByDesc(self::COL_CREATED_AT)->first();
 
-            $latestPayment = $detailPayments->sortByDesc(self::COL_CREATED_AT)->first();
+        $this->hydrateDetailFinancials($detail, $detailPayments, $globalPaidPerSession);
+        $calculatedOldPrice = $this->hydrateReschedulesHistory($detail, $detailPayments);
 
-            $specificInitialPaid = $detailPayments->where('status', PaymentStatus::SUCCESS->value)
-                ->whereIn(self::COL_PAYMENT_TYPE, [
-                    PaymentType::DOWN_PAYMENT->value,
-                    PaymentType::FINAL_PAYMENT->value,
-                ])
-                ->sum('amount');
+        $detail->initialPrice = $calculatedOldPrice;
 
-            $detail->initialPaid = (int) ($globalPaidPerSession + $specificInitialPaid);
+        $this->hydrateDetailStatusesAndPermissions(
+            $detail,
+            $latestPayment,
+            $minCancelDays,
+            $minRescheduleDays,
+            $maxRescheduleTimes
+        );
 
-            $detail->rescheduleFee = (int) $detailPayments->where(self::COL_PAYMENT_TYPE, PaymentType::RESCHEDULE_FEE->value)
-                ->where('status', PaymentStatus::SUCCESS->value)
-                ->sum('amount');
+        return $detail;
+    }
 
-            $detail->totalDanaMasukSesi = $detail->initialPaid + $detail->rescheduleFee;
+    private function resolveDetailPayments(BookingDetail $detail): Collection
+    {
+        if ($detail->payment instanceof Collection) {
+            return $detail->payment;
+        }
 
-            $detail->refundAmount = (int) $detailPayments->where(self::COL_PAYMENT_TYPE, PaymentType::REFUND->value)
-                ->where('status', PaymentStatus::SUCCESS->value)
-                ->sum('amount');
+        if ($detail->payment !== null) {
+            return collect([$detail->payment]);
+        }
 
-            $detail->danaHangus = max(0, $detail->totalDanaMasukSesi - $detail->refundAmount);
+        return collect();
+    }
 
-            $currentDetailPrice = (int) $detail->price;
-            $calculatedOldPrice = $currentDetailPrice;
+    private function hydrateDetailFinancials(BookingDetail $detail, Collection $detailPayments, int $globalPaidPerSession): void
+    {
+        $specificInitialPaid = $detailPayments->where('status', PaymentStatus::SUCCESS->value)
+            ->whereIn(self::COL_PAYMENT_TYPE, [
+                PaymentType::DOWN_PAYMENT->value,
+                PaymentType::FINAL_PAYMENT->value,
+            ])
+            ->sum('amount');
 
-            if ($detail->reschedules && $detail->reschedules->isNotEmpty()) {
-                foreach ($detail->reschedules as $rsc) {
-                    $rscPayment = $detailPayments->first(function ($p) {
-                        return in_array($p->payment_type, [PaymentType::RESCHEDULE_FEE->value, PaymentType::REFUND->value])
-                            || str_starts_with($p->reference_id ?? '', 'RSCH-')
-                            || str_starts_with($p->reference_id ?? '', 'REF-')
-                            || str_starts_with($p->reference_id ?? '', 'RSC-');
-                    });
+        $detail->initialPaid = (int) ($globalPaidPerSession + $specificInitialPaid);
 
-                    $diffAmount = $rscPayment ? (int) $rscPayment->amount : 0;
-                    $rsc->diffAmount = $diffAmount;
+        $detail->rescheduleFee = (int) $detailPayments->where(self::COL_PAYMENT_TYPE, PaymentType::RESCHEDULE_FEE->value)
+            ->where('status', PaymentStatus::SUCCESS->value)
+            ->sum('amount');
 
-                    $statusRefundNorm = strtolower($rsc->status_refund ?? 'none');
-                    if (str_contains($statusRefundNorm, 'refund')) {
-                        $rsc->adjustmentType = 'refund';
-                        $calculatedOldPrice = $currentDetailPrice + $diffAmount;
-                    } elseif (str_contains($statusRefundNorm, 'deposit')) {
-                        $rsc->adjustmentType = 'fee';
-                        $calculatedOldPrice = max(0, $currentDetailPrice - $diffAmount);
-                    } else {
-                        $rsc->adjustmentType = 'none';
-                        $calculatedOldPrice = $currentDetailPrice;
-                    }
+        $detail->totalDanaMasukSesi = $detail->initialPaid + $detail->rescheduleFee;
 
-                    $rsc->oldPrice = $calculatedOldPrice;
-                    $rsc->newPrice = $currentDetailPrice;
-                }
+        $detail->refundAmount = (int) $detailPayments->where(self::COL_PAYMENT_TYPE, PaymentType::REFUND->value)
+            ->where('status', PaymentStatus::SUCCESS->value)
+            ->sum('amount');
+
+        $detail->danaHangus = max(0, $detail->totalDanaMasukSesi - $detail->refundAmount);
+    }
+
+    private function hydrateReschedulesHistory(BookingDetail $detail, Collection $detailPayments): int
+    {
+        $currentDetailPrice = (int) $detail->price;
+        $calculatedOldPrice = $currentDetailPrice;
+
+        if (!$detail->reschedules || $detail->reschedules->isEmpty()) {
+            return $calculatedOldPrice;
+        }
+
+        foreach ($detail->reschedules as $rsc) {
+            $rscPayment = $detailPayments->first(function ($p) {
+                return in_array($p->payment_type, [PaymentType::RESCHEDULE_FEE->value, PaymentType::REFUND->value], true)
+                    || str_starts_with($p->reference_id ?? '', 'RSCH-')
+                    || str_starts_with($p->reference_id ?? '', 'REF-')
+                    || str_starts_with($p->reference_id ?? '', 'RSC-');
+            });
+
+            $diffAmount = $rscPayment ? (int) $rscPayment->amount : 0;
+            $rsc->diffAmount = $diffAmount;
+
+            $statusRefundNorm = strtolower($rsc->status_refund ?? 'none');
+            if (str_contains($statusRefundNorm, 'refund')) {
+                $rsc->adjustmentType = 'refund';
+                $calculatedOldPrice = $currentDetailPrice + $diffAmount;
+            } elseif (str_contains($statusRefundNorm, 'deposit')) {
+                $rsc->adjustmentType = 'fee';
+                $calculatedOldPrice = max(0, $currentDetailPrice - $diffAmount);
+            } else {
+                $rsc->adjustmentType = 'none';
+                $calculatedOldPrice = $currentDetailPrice;
             }
 
-            $detail->initialPrice = $calculatedOldPrice;
+            $rsc->oldPrice = $calculatedOldPrice;
+            $rsc->newPrice = $currentDetailPrice;
+        }
 
-            $detail->detailStatus = strtolower($detail->status ?? $latestPayment->status ?? PaymentStatus::PENDING->value);
-            $detail->detailBadge = $this->getBadgeClass($detail->detailStatus);
+        return $calculatedOldPrice;
+    }
 
-            $playDate = Carbon::parse($detail->play_date)->startOfDay();
-            $daysUntilPlay = now()->startOfDay()->diffInDays($playDate, false);
+    private function hydrateDetailStatusesAndPermissions(
+        BookingDetail $detail,
+        ?Payment $latestPayment,
+        int $minCancelDays,
+        int $minRescheduleDays,
+        int $maxRescheduleTimes
+    ): void {
+        $cancellation = $detail->cancellation;
+        $hasPendingCancellation = $cancellation && $cancellation->approval_status === 'pending';
+        $isApprovedCancellation = $cancellation && $cancellation->approval_status === 'approved';
+        $isRejectedCancellation = $cancellation && $cancellation->approval_status === 'rejected';
+        $isCancelled = $isApprovedCancellation || ($detail->status === BookingDetailStatus::CANCELLED->value);
 
-            $isPaid = in_array($detail->detailStatus, ['active', 'success', 'reschedule']);
+        $reschedules = $detail->reschedules ?? collect();
+        $pendingReschedule = $reschedules->firstWhere('approval_status', 'pending');
+        $hasPendingReschedule = $pendingReschedule !== null;
+        $approvedReschedulesCount = $reschedules->where('approval_status', 'approved')->count();
 
-            $detail->canReschedule = ($daysUntilPlay >= 3) && $isPaid;
-            $detail->canCancel = ($daysUntilPlay >= 3) && $isPaid;
-            $detail->alreadyRescheduled = ($detail->status === BookingDetailStatus::RESCHEDULE->value);
+        $detail->hasPendingCancellation = $hasPendingCancellation;
+        $detail->isApprovedCancellation = $isApprovedCancellation;
+        $detail->isRejectedCancellation = $isRejectedCancellation;
+        $detail->isCancelled = $isCancelled;
+        $detail->hasPendingReschedule = $hasPendingReschedule;
+        $detail->pendingReschedule = $pendingReschedule;
 
-            return $detail;
-        });
+        $detail->detailStatus = $this->determineDetailStatus(
+            $detail,
+            $latestPayment,
+            $isCancelled,
+            $hasPendingCancellation,
+            $hasPendingReschedule
+        );
 
-        return $booking;
+        $detail->detailBadge = $this->getBadgeClass($detail->detailStatus);
+
+        $playDate = Carbon::parse($detail->play_date)->startOfDay();
+        $daysUntilPlay = now()->startOfDay()->diffInDays($playDate, false);
+        $isPaid = in_array(strtolower($detail->status), ['active', 'booked', 'reschedule', 'success'], true);
+
+        $canPerformAction = !$isCancelled && !$hasPendingCancellation && !$hasPendingReschedule && $isPaid;
+
+        $detail->canCancel = $canPerformAction && ($daysUntilPlay >= $minCancelDays);
+        $detail->canReschedule = $canPerformAction && ($daysUntilPlay >= $minRescheduleDays) && ($approvedReschedulesCount < $maxRescheduleTimes);
+    }
+
+    private function determineDetailStatus(
+        BookingDetail $detail,
+        ?Payment $latestPayment,
+        bool $isCancelled,
+        bool $hasPendingCancellation,
+        bool $hasPendingReschedule
+    ): string {
+        if ($isCancelled) {
+            return 'cancelled';
+        }
+
+        if ($hasPendingCancellation) {
+            return 'menunggu pembatalan';
+        }
+
+        if ($hasPendingReschedule) {
+            return 'menunggu reschedule';
+        }
+
+        return strtolower($detail->status ?? $latestPayment->status ?? PaymentStatus::PENDING->value);
     }
 
     private function appendFinancialSummary(Booking $booking): Booking
     {
         $totalDetails = $booking->details->count();
-        $cancelledDetails = $booking->details->where(self::COL_STATUS, BookingDetailStatus::CANCELLED->value)->count();
+        $cancelledDetails = $booking->details->filter(function ($d) {
+            return $d->status === BookingDetailStatus::CANCELLED->value
+                || ($d->cancellation && $d->cancellation->approval_status === 'approved');
+        })->count();
 
         $booking->mainPayment = $booking->payments
             ->where(self::COL_PAYMENT_TYPE, '!=', PaymentType::REFUND->value)
@@ -198,7 +306,11 @@ class TenantHistoryService
             return $detail->attributes ? $detail->attributes->sum('total') : 0;
         });
 
-        $booking->tagihanAktif = $booking->details->where(self::COL_STATUS, '!=', BookingDetailStatus::CANCELLED->value)->sum('price') + $totalAttributesPrice;
+        $booking->tagihanAktif = $booking->details->filter(function ($d) {
+            return $d->status !== BookingDetailStatus::CANCELLED->value
+                && !($d->cancellation && $d->cancellation->approval_status === 'approved');
+        })->sum('price') + $totalAttributesPrice;
+
         $booking->uangMasuk = $booking->payments->where(self::COL_STATUS, PaymentStatus::SUCCESS->value)->where(self::COL_PAYMENT_TYPE, '!=', PaymentType::REFUND->value)->sum('amount');
         $booking->uangRefund = $booking->payments->where(self::COL_STATUS, PaymentStatus::SUCCESS->value)->where(self::COL_PAYMENT_TYPE, PaymentType::REFUND->value)->sum('amount');
 
@@ -219,6 +331,8 @@ class TenantHistoryService
             'booked'                  => 'bg-blue-50 text-blue-700 border-blue-200',
             'active'                  => 'bg-blue-50 text-blue-700 border-blue-200',
             'reschedule'              => 'bg-amber-50 text-amber-800 border-amber-200',
+            'menunggu pembatalan'     => 'bg-amber-50 text-amber-800 border-amber-300',
+            'menunggu reschedule'     => 'bg-amber-50 text-amber-800 border-amber-300',
             'cancelled'               => 'bg-red-50 text-red-700 border-red-200',
             'field closure'           => 'bg-red-50 text-red-800 border-red-200',
             'closed field cancelled'  => 'bg-red-50 text-red-900 border-red-200',
