@@ -18,7 +18,6 @@ class CancelController extends Controller
 
     protected CancelService $cancelService;
 
-    const UNAUTHORIZED_MESSAGE = 'Unauthorized field access.';
     public function __construct(CancelService $cancelService)
     {
         $this->cancelService = $cancelService;
@@ -30,7 +29,7 @@ class CancelController extends Controller
             $detail = BookingDetail::query()->findOrFail($detail_booking_id);
 
             if (!$this->checkFieldAccess($request->user(), $detail->booking->fk_field_id)) {
-                throw new HttpException(403, self::UNAUTHORIZED_MESSAGE);
+                throw new HttpException(403, 'Unauthorized field access.');
             }
 
             $this->cancelService->execute($detail, $request->validated(), $request->user());
@@ -48,14 +47,23 @@ class CancelController extends Controller
 
     public function approve(Request $request, $detail_booking_id): JsonResponse
     {
+        $request->validate([
+            'status_refund' => 'nullable|string|in:None,Partial,Full,none,partial,full',
+            'refund_amount' => 'nullable|integer|min:0',
+        ]);
+
         try {
             $detail = BookingDetail::query()->findOrFail($detail_booking_id);
 
             if (!$this->checkFieldAccess($request->user(), $detail->booking->fk_field_id)) {
-                throw new HttpException(403, self::UNAUTHORIZED_MESSAGE);
+                throw new HttpException(403, 'Unauthorized field access.');
             }
 
-            $this->cancelService->approve($detail, $request->user());
+            $this->cancelService->approve(
+                $detail,
+                $request->user(),
+                $request->only(['status_refund', 'refund_amount'])
+            );
 
             return response()->json([
                 'status'  => 'success',
@@ -78,7 +86,7 @@ class CancelController extends Controller
             $detail = BookingDetail::query()->findOrFail($detail_booking_id);
 
             if (!$this->checkFieldAccess($request->user(), $detail->booking->fk_field_id)) {
-                throw new HttpException(403, self::UNAUTHORIZED_MESSAGE);
+                throw new HttpException(403, 'Unauthorized field access.');
             }
 
             $this->cancelService->reject($detail, $request->input('rejection_reason'), $request->user());

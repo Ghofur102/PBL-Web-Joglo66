@@ -62,9 +62,9 @@ class CancelService
         });
     }
 
-    public function approve(BookingDetail $detail, User $actor): void
+    public function approve(BookingDetail $detail, User $actor, array $customRefund = []): void
     {
-        DB::transaction(function () use ($detail, $actor) {
+        DB::transaction(function () use ($detail, $actor, $customRefund) {
             $cancellation = BookingCancelled::where('fk_booking_detail_id', $detail->id)
                 ->where('approval_status', 'pending')
                 ->latest('id')
@@ -74,8 +74,12 @@ class CancelService
                 throw new DomainException('Tidak ada pengajuan pembatalan yang menunggu persetujuan.');
             }
 
+            $statusRefund = $customRefund['status_refund'] ?? $cancellation->status_refund ?? 'None';
+            $refundAmount = (int) ($customRefund['refund_amount'] ?? 0);
+
             $cancellation->update([
                 'approval_status' => 'approved',
+                'status_refund'   => $statusRefund,
             ]);
 
             $detail->update([
@@ -86,11 +90,24 @@ class CancelService
                 ->where('status', PaymentStatus::PENDING->value)
                 ->update(['status' => PaymentStatus::FAILED->value]);
 
+            if (strtolower($statusRefund) !== 'none' && $refundAmount > 0) {
+                Payment::create([
+                    'fk_booking_id'        => $detail->fk_booking_id,
+                    'fk_booking_detail_id' => $detail->id,
+                    'reference_id'         => 'CNL-REF-' . strtoupper(Str::random(10)),
+                    'payment_type'         => PaymentType::REFUND->value,
+                    'method'               => 'cash',
+                    'amount'               => $refundAmount,
+                    'status'               => PaymentStatus::SUCCESS->value,
+                    'paid_at'              => now(),
+                ]);
+            }
+
             $tenant = $detail->booking->user;
             if ($tenant) {
                 $tenant->notify(new GeneralBookingNotification([
                     'title'       => 'Pengajuan Pembatalan Disetujui',
-                    'message'     => "Permohonan pembatalan booking #{$detail->fk_booking_id} telah disetujui oleh admin.",
+                    'message'     => "Permohonan pembatalan booking #{$detail->fk_booking_id} telah disetujui.",
                     'type'        => 'cancel_approved',
                     'booking_id'  => $detail->fk_booking_id,
                     'url'         => route('tenant.booking.history.show', $detail->fk_booking_id),

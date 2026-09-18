@@ -8,6 +8,7 @@ use App\Enums\PaymentStatus;
 use App\Enums\PaymentType;
 use App\Models\BookingCancelled;
 use App\Models\BookingDetail;
+use App\Models\BookingReschedule;
 use App\Models\FieldWorker;
 use App\Models\Payment;
 use App\Models\User;
@@ -55,12 +56,20 @@ class TenantCancelBookingService
             throw new DomainException('Booking ini sudah dibatalkan sebelumnya.');
         }
 
-        $existingPending = BookingCancelled::where('fk_booking_detail_id', $detail->id)
+        $existingPendingCancel = BookingCancelled::where('fk_booking_detail_id', $detail->id)
             ->where('approval_status', 'pending')
             ->exists();
 
-        if ($existingPending) {
+        if ($existingPendingCancel) {
             throw new DomainException('Pengajuan pembatalan untuk booking ini sedang menunggu persetujuan.');
+        }
+
+        $existingPendingReschedule = BookingReschedule::where('fk_booking_detail_id', $detail->id)
+            ->where('approval_status', 'pending')
+            ->exists();
+
+        if ($existingPendingReschedule) {
+            throw new DomainException('Tidak dapat mengajukan pembatalan karena sesi ini sedang menunggu persetujuan reschedule.');
         }
 
         $cancellationData = $this->getCancellationData($detail);
@@ -86,14 +95,15 @@ class TenantCancelBookingService
             $workers = User::whereIn('id', $workerUserIds)->get();
             if ($workers->isNotEmpty()) {
                 Notification::send($workers, new GeneralBookingNotification([
-                    'title'       => 'Pengajuan Pembatalan Booking',
-                    'message'     => "Penyewa {$tenantUser->name} mengajukan pembatalan booking #{$detail->fk_booking_id}. Alasan: {$reason}",
-                    'type'        => 'cancel_request',
-                    'booking_id'  => $detail->fk_booking_id,
-                    'url'         => "/admin/detail-booking/{$detail->fk_booking_id}",
-                    'sender_id'   => $tenantUser->id,
-                    'sender_name' => $tenantUser->name,
-                    'sender_role' => 'tenant',
+                    'title'             => 'Pengajuan Pembatalan Booking',
+                    'message'           => "Penyewa {$tenantUser->name} mengajukan pembatalan booking #{$detail->fk_booking_id}. Alasan: {$reason}",
+                    'type'              => 'cancel_request',
+                    'booking_id'        => $detail->fk_booking_id,
+                    'booking_detail_id' => $detail->id,
+                    'url'               => "/admin/detail-booking/{$detail->fk_booking_id}",
+                    'sender_id'         => $tenantUser->id,
+                    'sender_name'       => $tenantUser->name,
+                    'sender_role'       => 'tenant',
                 ]));
             }
 
@@ -101,14 +111,15 @@ class TenantCancelBookingService
                 $owner = User::find($field->fk_user_id);
                 if ($owner) {
                     $owner->notify(new GeneralBookingNotification([
-                        'title'       => 'Info Pengajuan Pembatalan',
-                        'message'     => "Penyewa {$tenantUser->name} mengajukan pembatalan booking #{$detail->fk_booking_id} pada {$field->name}.",
-                        'type'        => 'cancel_info',
-                        'booking_id'  => $detail->fk_booking_id,
-                        'url'         => "/owner/detail-booking/{$detail->fk_booking_id}",
-                        'sender_id'   => $tenantUser->id,
-                        'sender_name' => $tenantUser->name,
-                        'sender_role' => 'tenant',
+                        'title'             => 'Info Pengajuan Pembatalan',
+                        'message'           => "Penyewa {$tenantUser->name} mengajukan pembatalan booking #{$detail->fk_booking_id} pada {$field->name}.",
+                        'type'              => 'cancel_info',
+                        'booking_id'        => $detail->fk_booking_id,
+                        'booking_detail_id' => $detail->id,
+                        'url'               => "/owner/detail-booking/{$detail->fk_booking_id}",
+                        'sender_id'         => $tenantUser->id,
+                        'sender_name'       => $tenantUser->name,
+                        'sender_role'       => 'tenant',
                     ]));
                 }
             }
