@@ -6,8 +6,10 @@ use App\Models\Field;
 use App\Models\FieldPrice;
 use App\Models\FieldClosure;
 use App\Models\BookingDetail;
+use App\Models\User;
 use App\Enums\GeneralStatus;
 use App\Enums\BookingDetailStatus;
+use App\Notifications\GeneralBookingNotification;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -143,17 +145,6 @@ class FieldService
                 'reason'                   => $data['reason'],
             ]);
 
-            BookingDetail::whereHas('booking', function ($query) use ($data) {
-                    /** @var \Illuminate\Database\Eloquent\Builder $query */
-                    $query->where('fk_field_id', $data['fk_field_id']);
-                })
-                ->whereRaw('TIMESTAMP(play_date, start_play_time) < ? && TIMESTAMP(play_date, end_play_time) > ?', [
-                    $data['field_closure_end_time'],
-                    $data['field_closure_start_time'],
-                ])
-                ->where('status', '!=', BookingDetailStatus::CANCELLED->value)
-                ->update(['status' => BookingDetailStatus::FIELD_CLOSURE->value]);
-
             $affectedBookings = BookingDetail::whereHas('booking', function ($query) use ($data) {
                     /** @var \Illuminate\Database\Eloquent\Builder $query */
                     $query->where('fk_field_id', $data['fk_field_id']);
@@ -162,9 +153,40 @@ class FieldService
                     $data['field_closure_end_time'],
                     $data['field_closure_start_time'],
                 ])
-                ->where('status', BookingDetailStatus::FIELD_CLOSURE->value)
+                ->whereNotIn('status', [
+                    BookingDetailStatus::CANCELLED->value,
+                    BookingDetailStatus::FIELD_CLOSURE->value,
+                    BookingDetailStatus::CLOSED_FIELD_CANCELLED->value,
+                    BookingDetailStatus::CLOSED_FIELD_RESCHEDULE->value,
+                ])
                 ->with('booking.user')
                 ->get();
+
+            if ($affectedBookings->isNotEmpty()) {
+                BookingDetail::whereIn('id', $affectedBookings->modelKeys())
+                    ->update(['status' => BookingDetailStatus::FIELD_CLOSURE->value]);
+            }
+
+            $actor = User::find($userId);
+            foreach ($affectedBookings as $detail) {
+                $tenant = $detail->booking?->user;
+
+                if (!$tenant) {
+                    continue;
+                }
+
+                $tenant->notify(new GeneralBookingNotification([
+                    'title'       => 'Jadwal Bermain Ditutup',
+                    'message'     => "Jadwal sewa pada booking #{$detail->fk_booking_id} terdampak penutupan lapangan oleh pihak pengelola.",
+                    'type'        => 'field_closure_by_admin',
+                    'booking_id'  => $detail->fk_booking_id,
+                    'booking_detail_id' => $detail->id,
+                    'url'         => route('tenant.booking.history.show', $detail->fk_booking_id),
+                    'sender_id'   => $actor?->id,
+                    'sender_name' => $actor?->name,
+                    'sender_role' => $actor?->role,
+                ]));
+            }
 
             return [
                 'closure'           => $closure,

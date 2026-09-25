@@ -85,6 +85,11 @@
                                     <span class="px-2.5 py-1 rounded-tenant-full text-xs font-semibold border {{ $detail->detailBadge }} capitalize">
                                         {{ $detail->detailStatus }}
                                     </span>
+                                    @if (in_array($detail->status, ['field closure', 'closed field cancelled', 'closed field reschedule'], true))
+                                        <span class="ml-1 inline-flex px-2.5 py-1 rounded-tenant-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+                                            Sesi Ditutup
+                                        </span>
+                                    @endif
                                 </td>
                                 <td class="px-6 py-4 font-semibold {{ $detail->isCancelled ? 'line-through text-gray-400' : 'text-gray-900' }} text-right">
                                     Rp {{ number_format($detail->price, 0, ',', '.') }}
@@ -118,6 +123,11 @@
                                     <span class="px-3 py-1 rounded-tenant-full text-xs font-bold border {{ $detail->detailBadge }} uppercase">
                                         {{ $detail->detailStatus }}
                                     </span>
+                                    @if (in_array($detail->status, ['field closure', 'closed field cancelled', 'closed field reschedule'], true))
+                                        <span class="px-3 py-1.5 rounded-tenant-md text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+                                            Sesi Ditutup
+                                        </span>
+                                    @endif
                                     @if ($detail->hasPendingCancellation)
                                         <span class="px-3 py-1.5 rounded-tenant-md text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
                                             Pengajuan Batal Diproses

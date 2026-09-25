@@ -49,6 +49,7 @@
                         @php
                             $isUnread = is_null($notification->read_at);
                             $type = $notification->data['type'] ?? 'info';
+                            $bookingDetailId = $notification->data['booking_detail_id'] ?? null;
                             $senderName = $notification->data['sender_name'] ?? 'Sistem';
                             $senderRole = $notification->data['sender_role'] ?? 'system';
                         @endphp
@@ -94,7 +95,15 @@
                                     </div>
                                 </div>
 
-                                <div class="shrink-0 self-end sm:self-center mt-2 sm:mt-0">
+                                <div class="shrink-0 self-end sm:self-center mt-2 sm:mt-0 flex flex-wrap justify-end gap-2">
+                                    @if($type === 'field_closure_by_admin' && $bookingDetailId)
+                                        <a href="{{ route('tenant.booking.form.reschedule', ['detail_booking_id' => $bookingDetailId]) }}" class="inline-flex items-center px-3 py-1.5 rounded-tenant-md text-xs font-semibold text-white bg-primary hover:bg-primary-dark transition">
+                                            Reschedule
+                                        </a>
+                                        <a href="{{ route('tenant.booking.form.cancelled', ['detail_booking_id' => $bookingDetailId]) }}" class="inline-flex items-center px-3 py-1.5 rounded-tenant-md text-xs font-semibold text-red-700 bg-red-50 border border-red-200 hover:bg-red-100 transition">
+                                            Cancel
+                                        </a>
+                                    @endif
                                     <a href="{{ route('tenant.notifications.read', $notification->id) }}" class="inline-flex items-center px-3 py-1.5 rounded-tenant-md text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 transition">
                                         Rincian &rarr;
                                     </a>

@@ -28,6 +28,7 @@ class GeneralBookingNotification extends Notification
             'message' => $this->payload['message'] ?? '',
             'type' => $this->payload['type'] ?? 'info',
             'booking_id' => $this->payload['booking_id'] ?? null,
+            'booking_detail_id' => $this->payload['booking_detail_id'] ?? null,
             'url' => $this->payload['url'] ?? null,
             'sender_id' => $this->payload['sender_id'] ?? null,
             'sender_name' => $this->payload['sender_name'] ?? 'Sistem',
