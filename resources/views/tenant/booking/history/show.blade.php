@@ -6,6 +6,7 @@
     <div class="w-full pb-12 mt-4">
 
         <x-tenant-card variant="flat" class="overflow-hidden mb-8">
+            {{-- Header Detail Pemesanan --}}
             <div class="bg-gray-50 border-b border-gray-100 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 -mx-4 -mt-4 mb-6">
                 <div>
                     <h1 class="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -27,6 +28,30 @@
                 </div>
             </div>
 
+            {{-- Banner Peringatan Pembatalan Otomatis & Tombol Bayar --}}
+            @if ($booking->mainPayment && strtolower($booking->mainPayment->status) === 'pending' && $booking->mainPayment->payment_url && $booking->sisaTagihan > 0)
+                <div class="mb-8 p-4 rounded-tenant-lg bg-amber-50 border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <span class="p-2 rounded-full bg-amber-100 text-amber-600 shrink-0">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                        </span>
+                        <div>
+                            <h2 class="text-sm font-bold text-amber-900">Menunggu Pembayaran</h2>
+                            <p class="text-xs text-amber-700 mt-0.5">Selesaikan transaksi sebelum batas waktu pemesanan habis agar jadwal sewa tidak dibatalkan otomatis.</p>
+                        </div>
+                    </div>
+                    <a href="{{ $booking->mainPayment->payment_url }}" target="_blank" rel="noopener noreferrer" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white text-xs sm:text-sm font-bold rounded-tenant-md shadow-tenant-md transition shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        Bayar Sekarang
+                    </a>
+                </div>
+            @endif
+
+            {{-- Informasi Pemesan & Lapangan --}}
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                 <div class="bg-gray-50/50 rounded-tenant-lg p-5 border border-gray-100 flex flex-col justify-between">
                     <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Informasi Pemesan</h3>
@@ -55,6 +80,7 @@
                 </div>
             </div>
 
+            {{-- Tabel Rincian Sesi Disewa --}}
             <h3 class="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
                 <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -100,6 +126,7 @@
                 </table>
             </div>
 
+            {{-- Detail Sesi & Alur Histori Perubahan --}}
             <div class="mt-8 mb-8">
                 <h3 class="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
                     <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -333,6 +360,7 @@
                 </div>
             </div>
 
+            {{-- Ringkasan Rincian Pembayaran --}}
             <div class="w-full text-sm bg-gray-50/50 p-6 rounded-tenant-lg border border-gray-200 shadow-tenant-sm mt-8">
                 <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Rincian Pembayaran</h3>
 
@@ -367,22 +395,39 @@
                     @endif
                 </div>
 
-                <div class="flex justify-between items-center mt-6 pt-6 border-t border-gray-200">
-                    <span class="text-lg font-bold text-gray-900">Sisa Tagihan</span>
+                {{-- Sisa Tagihan & Tombol Bayar --}}
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mt-6 pt-6 border-t border-gray-200 gap-4">
+                    <div>
+                        <span class="text-lg font-bold text-gray-900 block">Sisa Tagihan</span>
+                        @if ($booking->mainPayment && strtolower($booking->mainPayment->status) === 'pending' && $booking->mainPayment->payment_url && $booking->sisaTagihan > 0)
+                            <span class="text-xs text-amber-600 font-medium">Menunggu penyelesaian pembayaran oleh penyewa.</span>
+                        @endif
+                    </div>
 
-                    @if (in_array($booking->overallStatus, ['cancelled', 'failed', 'expired']) && $booking->sisaTagihan == 0)
-                        <span class="px-4 py-2 bg-gray-100 text-gray-500 rounded-tenant-md font-black tracking-widest uppercase text-sm border border-gray-200 shadow-tenant-sm">
-                            DIBATALKAN
-                        </span>
-                    @elseif($booking->sisaTagihan == 0)
-                        <span class="px-4 py-2 bg-green-100 text-green-700 rounded-tenant-md font-black tracking-widest uppercase text-sm border border-green-200 shadow-tenant-sm">
-                            LUNAS
-                        </span>
-                    @else
-                        <span class="text-2xl font-black text-red-500 tracking-tight">
-                            Rp {{ number_format($booking->sisaTagihan, 0, ',', '.') }}
-                        </span>
-                    @endif
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                        @if (in_array($booking->overallStatus, ['cancelled', 'failed', 'expired']) && $booking->sisaTagihan == 0)
+                            <span class="px-4 py-2 bg-gray-100 text-gray-500 rounded-tenant-md font-black tracking-widest uppercase text-sm border border-gray-200 shadow-tenant-sm">
+                                DIBATALKAN
+                            </span>
+                        @elseif($booking->sisaTagihan == 0)
+                            <span class="px-4 py-2 bg-green-100 text-green-700 rounded-tenant-md font-black tracking-widest uppercase text-sm border border-green-200 shadow-tenant-sm">
+                                LUNAS
+                            </span>
+                        @else
+                            <span class="text-2xl font-black text-red-500 tracking-tight">
+                                Rp {{ number_format($booking->sisaTagihan, 0, ',', '.') }}
+                            </span>
+                        @endif
+
+                        @if ($booking->mainPayment && strtolower($booking->mainPayment->status) === 'pending' && $booking->mainPayment->payment_url && $booking->sisaTagihan > 0)
+                            <a href="{{ $booking->mainPayment->payment_url }}" target="_blank" rel="noopener noreferrer" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white text-xs sm:text-sm font-bold rounded-tenant-md shadow-tenant-md transition cursor-pointer">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                                </svg>
+                                Bayar Sekarang
+                            </a>
+                        @endif
+                    </div>
                 </div>
             </div>
         </x-tenant-card>
