@@ -23,7 +23,8 @@ class FinancialReportService
             ->where('status', PaymentStatus::SUCCESS->value)
             ->whereBetween($paymentDateCol, [$startDate . ' 00:00:00',$endDate . ' 23:59:59']);
 
-        if (!empty($fieldIds)) {$paymentQuery->whereHas('booking', function ($q) use ($fieldIds) {
+        if (!empty($fieldIds)) {
+            $paymentQuery->whereHas('booking', function ($q) use ($fieldIds) {
                 $q->whereIn('fk_field_id',$fieldIds);
             });
         }
@@ -42,7 +43,8 @@ class FinancialReportService
             ->whereBetween($attributeDateCol, [$startDate,$endDate])
             ->whereNotIn('status', ['cancelled', 'batal', 'rejected']);
 
-        if (!empty($fieldIds)) {$attributeQuery->whereHas('attribute', function ($q) use ($fieldIds) {
+        if (!empty($fieldIds)) {
+            $attributeQuery->whereHas('attribute', function ($q) use ($fieldIds) {
                 $q->whereIn('fk_field_id',$fieldIds);
             });
         }
