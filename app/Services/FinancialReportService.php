@@ -12,117 +12,179 @@ use Illuminate\Support\Facades\Schema;
 
 class FinancialReportService
 {
-    public function getMonthlyReport(int $month, int $year, array$fieldIds = []): array
+    public function getMonthlyReport(int $month, int $year, array $filters = []): array
     {
-        $startDate = Carbon::createFromDate($year, $month, 1)->startOfMonth()->toDateString();$endDate = Carbon::createFromDate($year,$month, 1)->endOfMonth()->toDateString();
+        $fieldIds = $filters['field_ids'] ?? [];
+        $startDate = $filters['start_date'] ?? Carbon::createFromDate($year, $month, 1)->startOfMonth()->toDateString();
+        $endDate = $filters['end_date'] ?? Carbon::createFromDate($year, $month, 1)->endOfMonth()->toDateString();
+        $reportType = $filters['report_type'] ?? 'all';
 
         $paymentDateCol = Schema::hasColumn('payments', 'paid_at') ? 'paid_at' : 'created_at';
-        $expenseDateCol = Schema::hasColumn('expenses', 'expense_date') ? 'expense_date' : (Schema::hasColumn('expenses', 'date') ? 'date' : 'created_at');$attributeDateCol = Schema::hasColumn('booking_attributes', 'transaction_date') ? 'transaction_date' : 'created_at';
+        $expenseDateCol = Schema::hasColumn('expenses', 'expense_date') ? 'expense_date' : (Schema::hasColumn('expenses', 'date') ? 'date' : 'created_at');
+        $attributeDateCol = Schema::hasColumn('booking_attributes', 'transaction_date') ? 'transaction_date' : 'created_at';
 
         $paymentQuery = Payment::query()
             ->where('status', PaymentStatus::SUCCESS->value)
-            ->whereBetween($paymentDateCol, [$startDate . ' 00:00:00',$endDate . ' 23:59:59']);
+            ->whereBetween($paymentDateCol, [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
 
         if (!empty($fieldIds)) {
-            $paymentQuery->whereHas('booking', function ($q) use ($fieldIds) {
-                $q->whereIn('fk_field_id',$fieldIds);
+            $paymentQuery->whereHas('booking', function ($query) use ($fieldIds) {
+                $query->whereIn('fk_field_id', $fieldIds);
             });
         }
 
-        $payments =$paymentQuery->get();
+        if ($reportType === 'rental') {
+            $paymentQuery->whereIn('payment_type', [
+                PaymentType::DOWN_PAYMENT->value,
+                PaymentType::FINAL_PAYMENT->value,
+                PaymentType::RESCHEDULE_FEE->value,
+            ]);
+        }
 
-        $grossBookingIncome =$payments->whereIn('payment_type', [
+        if ($reportType === 'expense') {
+            $paymentQuery->where('id', null);
+        }
+
+        $payments = $paymentQuery->get();
+
+        $grossBookingIncome = $payments->whereIn('payment_type', [
             PaymentType::DOWN_PAYMENT->value,
             PaymentType::FINAL_PAYMENT->value,
             PaymentType::RESCHEDULE_FEE->value,
         ])->sum('amount');
 
-        $totalRefund =$payments->where('payment_type', PaymentType::REFUND->value)->sum('amount');
+        $totalRefund = $payments->where('payment_type', PaymentType::REFUND->value)->sum('amount');
 
         $attributeQuery = BookingAttribute::query()
-            ->whereBetween($attributeDateCol, [$startDate,$endDate])
+            ->whereBetween($attributeDateCol, [$startDate, $endDate])
             ->whereNotIn('status', ['cancelled', 'batal', 'rejected']);
 
         if (!empty($fieldIds)) {
-            $attributeQuery->whereHas('attribute', function ($q) use ($fieldIds) {
-                $q->whereIn('fk_field_id',$fieldIds);
+            $attributeQuery->whereHas('booking', function ($query) use ($fieldIds) {
+                $query->whereIn('fk_field_id', $fieldIds);
             });
         }
 
-        $attributes =$attributeQuery->get();
-        $totalAttributeIncome =$attributes->sum('total');
-
-        $expenseQuery = Expense::query()
-            ->whereBetween($expenseDateCol, [$startDate,$endDate]);
-
-        if (!empty($fieldIds)) {
-            $expenseQuery->whereIn('fk_field_id',$fieldIds);
+        if ($reportType === 'rental') {
+            $attributeQuery->where('id', null);
         }
 
-        $expenses =$expenseQuery->get();
-        $totalExpense =$expenses->sum('amount');
+        if ($reportType === 'expense') {
+            $attributeQuery->where('id', null);
+        }
 
-        $grossIncome = $grossBookingIncome +$totalAttributeIncome;
-        $netIncome = $grossIncome -$totalRefund;
-        $netProfit = $netIncome -$totalExpense;
+        $attributes = $attributeQuery->get();
+        $totalAttributeIncome = $attributes->sum('total');
 
-        $transactions =$this->buildTransactionList($payments,$attributes, $expenses,$paymentDateCol, $attributeDateCol,$expenseDateCol);
+        $expenseQuery = Expense::query()
+            ->whereBetween($expenseDateCol, [$startDate, $endDate]);
+
+        if (!empty($fieldIds)) {
+            $expenseQuery->whereIn('fk_field_id', $fieldIds);
+        }
+
+        if ($reportType !== 'all' && $reportType !== 'expense' && $reportType !== 'field') {
+            $expenseQuery->where('id', null);
+        }
+
+        $expenses = $expenseQuery->get();
+        $totalExpense = $expenses->sum('amount');
+
+        $grossIncome = $grossBookingIncome + $totalAttributeIncome;
+        $netIncome = $grossIncome - $totalRefund;
+        $netProfit = $netIncome - $totalExpense;
+
+        $transactions = $this->buildTransactionList(
+            $payments,
+            $attributes,
+            $expenses,
+            $paymentDateCol,
+            $attributeDateCol,
+            $expenseDateCol,
+            $reportType,
+        );
 
         $summaryData = [
-            'month'                  => $month,
-            'year'                   => $year,
-            'gross_booking_income'   => (int) $grossBookingIncome,
+            'month' => $month,
+            'year' => $year,
+            'report_type' => $reportType,
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'gross_booking_income' => (int) $grossBookingIncome,
             'total_attribute_income' => (int) $totalAttributeIncome,
-            'gross_income'           => (int) $grossIncome,
-            'total_refund'           => (int) $totalRefund,
-            'net_income'             => (int) $netIncome,
-            'total_expense'          => (int) $totalExpense,
-            'net_profit'             => (int) $netProfit,
+            'gross_income' => (int) $grossIncome,
+            'total_refund' => (int) $totalRefund,
+            'net_income' => (int) $netIncome,
+            'total_expense' => (int) $totalExpense,
+            'net_profit' => (int) $netProfit,
         ];
 
         return array_merge($summaryData, [
-            'summary'      => $summaryData,
+            'summary' => $summaryData,
             'transactions' => $transactions,
         ]);
     }
 
-    private function buildTransactionList($payments,$attributes, $expenses,$pCol, $aCol,$eCol): array
-    {
+    private function buildTransactionList(
+        $payments,
+        $attributes,
+        $expenses,
+        string $pCol,
+        string $aCol,
+        string $eCol,
+        string $reportType,
+    ): array {
         $list = [];
 
-        foreach ($payments as$p) {
-            $isRefund =$p->payment_type === PaymentType::REFUND->value;
-            $list[] = [
-                'id'          => 'PAY-' . $p->id,
-                'title'       => $isRefund ? 'Pengembalian Dana (Refund)' : 'Pembayaran Sewa Lapangan',
-                'description' => 'Ref: ' . ($p->reference_id ?? '-'),
-                'amount'      => (int) $p->amount,
-                'type'        => $isRefund ? 'refund' : 'income',
-                'date'        => Carbon::parse($p->{$pCol})->format('Y-m-d H:i'),
-            ];
+        if (in_array($reportType, ['all', 'income', 'field', 'rental'], true)) {
+            foreach ($payments as $payment) {
+                $isRefund = $payment->payment_type === PaymentType::REFUND->value;
+
+                if ($reportType === 'rental' && $isRefund) {
+                    continue;
+                }
+
+                $list[] = [
+                    'id' => 'PAY-' . $payment->id,
+                    'title' => $isRefund ? 'Pengembalian Dana (Refund)' : 'Pembayaran Sewa Lapangan',
+                    'description' => 'Ref: ' . ($payment->reference_id ?? '-'),
+                    'amount' => (int) $payment->amount,
+                    'type' => $isRefund ? 'refund' : 'income',
+                    'date' => Carbon::parse($payment->{$pCol})->format('Y-m-d H:i'),
+                    'field_name' => $payment->booking?->field?->name ?? null,
+                ];
+            }
         }
 
-        foreach ($attributes as $a) {$list[] = [
-                'id'          => 'ATTR-' . $a->id,
-                'title'       => 'Sewa Atribut: ' . ($a->customer_name ?? 'Pelanggan'),
-                'description' => 'Jumlah: ' . $a->quantity . ' pcs (' . ucfirst($a->status) . ')',
-                'amount'      => (int) $a->total,
-                'type'        => 'income',
-                'date'        => Carbon::parse($a->{$aCol})->format('Y-m-d'),
-            ];
+        if (in_array($reportType, ['all', 'income', 'field'], true)) {
+            foreach ($attributes as $attribute) {
+                $list[] = [
+                    'id' => 'ATTR-' . $attribute->id,
+                    'title' => 'Sewa Atribut: ' . ($attribute->customer_name ?? 'Pelanggan'),
+                    'description' => 'Jumlah: ' . $attribute->quantity . ' pcs (' . ucfirst($attribute->status) . ')',
+                    'amount' => (int) $attribute->total,
+                    'type' => 'income',
+                    'date' => Carbon::parse($attribute->{$aCol})->format('Y-m-d'),
+                    'field_name' => $attribute->booking?->field?->name ?? null,
+                ];
+            }
         }
 
-        foreach ($expenses as $e) {$list[] = [
-                'id'          => 'EXP-' . $e->id,
-                'title'       => 'Pengeluaran: ' . ($e->category ?? 'Operasional'),
-                'description' => $e->note ?? $e->description ?? '-',
-                'amount'      => (int) $e->amount,
-                'type'        => 'expense',
-                'date'        => Carbon::parse($e->{$eCol})->format('Y-m-d'),
-            ];
+        if (in_array($reportType, ['all', 'expense', 'field'], true)) {
+            foreach ($expenses as $expense) {
+                $list[] = [
+                    'id' => 'EXP-' . $expense->id,
+                    'title' => 'Pengeluaran: ' . ($expense->category ?? 'Operasional'),
+                    'description' => $expense->note ?? $expense->description ?? '-',
+                    'amount' => (int) $expense->amount,
+                    'type' => 'expense',
+                    'date' => Carbon::parse($expense->{$eCol})->format('Y-m-d'),
+                    'field_name' => $expense->field?->name ?? null,
+                ];
+            }
         }
 
-        usort($list, fn($a,$b) => strcmp($b['date'],$a['date']));
+        usort($list, fn ($a, $b) => strcmp($b['date'], $a['date']));
 
         return $list;
     }
