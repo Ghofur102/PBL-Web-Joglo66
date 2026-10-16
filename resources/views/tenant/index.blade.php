@@ -45,6 +45,28 @@
         </div>
     </div>
 
+    @if ($selectedField)
+        <section class="mb-10 border-t border-gray-200 pt-6" aria-labelledby="refund-rules-heading">
+            <h2 id="refund-rules-heading" class="text-xl font-bold mb-4 text-gray-900">Aturan Refund</h2>
+            <div class="grid gap-6 md:grid-cols-2">
+                @foreach (['cancel' => 'Pembatalan', 'reschedule' => 'Perubahan Jadwal'] as $type => $label)
+                    <div>
+                        <h3 class="font-semibold text-gray-800 mb-2">{{ $label }}</h3>
+                        @php($rules = $selectedField->refundRules->where('rule_type', $type)->where('is_active', true)->sortByDesc('min_hours_before'))
+                        @forelse ($rules as $rule)
+                            <p class="text-sm text-gray-600">
+                                {{ $label }} minimal {{ $rule->min_hours_before }} jam sebelum waktu main:
+                                refund {{ $rule->refund_percent }}%
+                            </p>
+                        @empty
+                            <p class="text-sm text-gray-600">Tidak ada aturan refund aktif.</p>
+                        @endforelse
+                    </div>
+                @endforeach
+            </div>
+        </section>
+    @endif
+
     <h2 class="text-2xl font-bold mb-4 text-gray-900 mt-10">Booking Terdekat</h2>
     <div class="mb-10 flex flex-col gap-3">
         @if ($selectedField && $nearestBookings->isNotEmpty())

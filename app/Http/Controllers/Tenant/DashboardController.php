@@ -4,11 +4,11 @@ namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Tenant\GetTenantDashboardRequest;
-use App\Services\Tenant\TenantDashboardService;
 use App\Models\Field;
+use App\Services\Tenant\TenantDashboardService;
 use Carbon\Carbon;
-use Illuminate\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
@@ -30,11 +30,11 @@ class DashboardController extends Controller
         $userBookings = collect();
 
         if ($selectedFieldId) {
-            $selectedField = Field::query()->findOrFail($selectedFieldId);
+            $selectedField = Field::query()->with('refundRules')->findOrFail($selectedFieldId);
             $now = Carbon::now();
 
-            $nearestBookings = $this->dashboardService->getNearestBookings((int)$selectedFieldId, $now);
-            $userBookings = $this->dashboardService->getUserBookings((int)$userId, (int)$selectedFieldId);
+            $nearestBookings = $this->dashboardService->getNearestBookings((int) $selectedFieldId, $now);
+            $userBookings = $this->dashboardService->getUserBookings((int) $userId, (int) $selectedFieldId);
         }
 
         return view('tenant.index', compact(

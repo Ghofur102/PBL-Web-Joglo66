@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Owner;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Owner\OwnerFieldRequest;
 use App\Models\Field;
+use App\Services\RefundRuleService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class OwnerFieldController extends Controller
@@ -15,7 +17,11 @@ class OwnerFieldController extends Controller
     public function index(): JsonResponse
     {
         try {
-            $fields = Field::with('fieldPrices')
+            if (Auth::user()?->role !== UserRole::OWNER->value) {
+                return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
+            }
+
+            $fields = Field::with(['fieldPrices', 'refundRules'])
                 ->where('fk_user_id', Auth::id())
                 ->get();
 
@@ -25,64 +31,66 @@ class OwnerFieldController extends Controller
         }
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(OwnerFieldRequest $request, RefundRuleService $refundRuleService): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'name'                 => 'required|string|max:50',
-            'category'             => 'required|in:futsal,mini soccer',
-            'description'          => 'nullable|string',
-            'image_url'            => 'nullable|string|max:255',
-            'min_cancel_days'      => 'nullable|integer|min:0|max:30',
-            'min_reschedule_days'  => 'nullable|integer|min:0|max:30',
-            'max_reschedule_times' => 'nullable|integer|min:1|max:10',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['success' => false, 'message' => $validator->errors()->first()], 422);
-        }
-
         try {
-            $payload = $validator->validated();
+            $payload = $request->validated();
+            $refundRules = $payload['refund_rules'] ?? RefundRuleService::defaultRules();
+            unset($payload['refund_rules']);
             $payload['fk_user_id'] = Auth::id();
 
-            $field = Field::create($payload);
+            $field = Field::query()->getConnection()->transaction(function () use ($payload, $refundRules, $refundRuleService) {
+                $field = Field::create($payload);
+                $refundRuleService->syncRules($field, $refundRules);
+
+                return $field->load(['fieldPrices', 'refundRules']);
+            });
 
             return response()->json(['success' => true, 'message' => 'Lapangan berhasil ditambahkan.', 'data' => $field], 201);
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'message' => $e->validator->errors()->first(), 'errors' => $e->errors()], 422);
         } catch (Throwable $e) {
             return response()->json(['success' => false, 'message' => 'Gagal menambahkan lapangan.'], 500);
         }
     }
 
-    public function update(Request $request, $id): JsonResponse
+    public function update(OwnerFieldRequest $request, $id, RefundRuleService $refundRuleService): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'name'                 => 'required|string|max:50',
-            'category'             => 'required|in:futsal,mini soccer',
-            'description'          => 'nullable|string',
-            'image_url'            => 'nullable|string|max:255',
-            'min_cancel_days'      => 'nullable|integer|min:0|max:30',
-            'min_reschedule_days'  => 'nullable|integer|min:0|max:30',
-            'max_reschedule_times' => 'nullable|integer|min:1|max:10',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['success' => false, 'message' => $validator->errors()->first()], 422);
-        }
+        $status = 200;
+        $responseData = [];
 
         try {
             $field = Field::where('id', $id)
                 ->where('fk_user_id', Auth::id())
                 ->first();
 
-            if (!$field) {
-                return response()->json(['success' => false, 'message' => 'Lapangan tidak ditemukan atau bukan milik Anda.'], 404);
+            if (! $field) {
+                $status = 404;
+                $responseData = ['success' => false, 'message' => 'Lapangan tidak ditemukan atau bukan milik Anda.'];
+            } else {
+                $payload = $request->validated();
+                $refundRules = $payload['refund_rules'] ?? null;
+                unset($payload['refund_rules']);
+
+                $field = $field->getConnection()->transaction(function () use ($field, $payload, $refundRules, $refundRuleService) {
+                    $field->update($payload);
+                    if ($refundRules !== null) {
+                        $refundRuleService->syncRules($field, $refundRules);
+                    }
+
+                    return $field->fresh(['fieldPrices', 'refundRules']);
+                });
+
+                $responseData = ['success' => true, 'message' => 'Lapangan berhasil diperbarui.', 'data' => $field];
             }
-
-            $field->update($validator->validated());
-
-            return response()->json(['success' => true, 'message' => 'Lapangan berhasil diperbarui.', 'data' => $field], 200);
+        } catch (ValidationException $e) {
+            $status = 422;
+            $responseData = ['success' => false, 'message' => $e->validator->errors()->first(), 'errors' => $e->errors()];
         } catch (Throwable $e) {
-            return response()->json(['success' => false, 'message' => 'Gagal mengupdate lapangan.'], 500);
+            $status = 500;
+            $responseData = ['success' => false, 'message' => 'Gagal mengupdate lapangan.'];
         }
+
+        return response()->json($responseData, $status);
     }
 }

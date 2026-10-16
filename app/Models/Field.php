@@ -38,6 +38,11 @@ class Field extends CoreDmlModel
         return $this->hasMany(FieldPrice::class, 'fk_field_id', 'id');
     }
 
+    public function refundRules(): HasMany
+    {
+        return $this->hasMany(FieldRefundRule::class, 'fk_field_id', 'id');
+    }
+
     public function bookings(): HasMany
     {
         return $this->hasMany(Booking::class, 'fk_field_id', 'id');
