@@ -13,16 +13,19 @@ use App\Models\FieldWorker;
 use App\Models\Payment;
 use App\Models\User;
 use App\Notifications\GeneralBookingNotification;
+use App\Services\RefundRuleService;
 use Carbon\Carbon;
 use DomainException;
-use UnexpectedValueException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use UnexpectedValueException;
 
 class TenantCancelBookingService
 {
     private const DB_CONNECTION = 'mysql_joglo66_app';
+
+    public function __construct(private readonly RefundRuleService $refundRuleService) {}
 
     public function getCancellationData(BookingDetail $detail): array
     {
@@ -32,24 +35,47 @@ class TenantCancelBookingService
         $playDate = Carbon::parse($detail->play_date)->startOfDay();
         $daysUntilPlay = Carbon::now()->startOfDay()->diffInDays($playDate, false);
         $netPaid = $this->calculatePaymentTotals($detail);
+        $policy = $this->refundRuleService->getPolicy(
+            (int) $field->id,
+            'cancel',
+            Carbon::parse($detail->play_date.' '.$detail->start_play_time, config('app.timezone'))
+        );
+        $isPaid = strtolower($detail->status) !== 'waiting';
+        $canSubmit = $isPaid && $policy['isWithinWindow'] && $policy['terms'] !== [];
 
         $isRefundable = $daysUntilPlay >= $minCancelDays;
         $refundAmount = $isRefundable ? $netPaid : 0;
 
         return [
-            'playDate'      => $playDate,
+            'playDate' => $playDate,
             'daysUntilPlay' => $daysUntilPlay,
             'minCancelDays' => $minCancelDays,
-            'netPaid'       => $netPaid,
-            'isRefundable'  => $isRefundable,
-            'refundAmount'  => $refundAmount,
+            'netPaid' => $netPaid,
+            'isRefundable' => $isRefundable,
+            'refundAmount' => $refundAmount,
+            'terms' => $policy['terms'],
+            'deadline' => $policy['deadline'],
+            'currentPercent' => $policy['currentPercent'],
+            'estimateRefundAmount' => $policy['currentPercent'] === null
+                ? null
+                : (int) round($netPaid * $policy['currentPercent'] / 100),
+            'isPaid' => $isPaid,
+            'canSubmit' => $canSubmit,
         ];
     }
 
     public function processCancellation(BookingDetail $detail, string $reason): void
     {
         if (strtolower($detail->status) === 'waiting') {
-            throw new UnexpectedValueException('Fitur pembatalan tidak tersedia. Silakan selesaikan pembayaran terlebih dahulu.');
+            throw new UnexpectedValueException('Pesanan yang belum dibayar tidak dapat diajukan cancel.');
+        }
+
+        $policy = $this->getPolicy($detail);
+        if ($policy['terms'] === []) {
+            throw new UnexpectedValueException('Hubungi admin lapangan untuk kebijakan pembatalan.');
+        }
+        if (! $policy['isWithinWindow']) {
+            throw new UnexpectedValueException('Mohon maaf, pengajuan cancel ditolak karena telah melewati batas maksimal waktu pengajuan.');
         }
 
         if ($detail->status === BookingDetailStatus::CANCELLED->value) {
@@ -79,13 +105,13 @@ class TenantCancelBookingService
         DB::connection(self::DB_CONNECTION)->transaction(function () use ($detail, $reason, $cancellationData, $tenantUser, $field) {
             BookingCancelled::create([
                 'fk_booking_detail_id' => $detail->id,
-                'cancle_date'          => now()->toDateString(),
-                'reason'               => $reason,
-                'status_refund'        => $cancellationData['isRefundable']
+                'cancle_date' => now()->toDateString(),
+                'reason' => $reason,
+                'status_refund' => $cancellationData['isRefundable']
                     ? CancelRefundStatus::FULL->value
                     : CancelRefundStatus::NONE->value,
-                'approval_status'      => 'pending',
-                'sender_by'            => 'tenant',
+                'approval_status' => 'pending',
+                'sender_by' => 'tenant',
             ]);
 
             $workerUserIds = FieldWorker::query()
@@ -95,15 +121,15 @@ class TenantCancelBookingService
             $workers = User::whereIn('id', $workerUserIds)->get();
             if ($workers->isNotEmpty()) {
                 Notification::send($workers, new GeneralBookingNotification([
-                    'title'             => 'Pengajuan Pembatalan Booking',
-                    'message'           => "Penyewa {$tenantUser->name} mengajukan pembatalan booking #{$detail->fk_booking_id}. Alasan: {$reason}",
-                    'type'              => 'cancel_request',
-                    'booking_id'        => $detail->fk_booking_id,
+                    'title' => 'Pengajuan Pembatalan Booking',
+                    'message' => "Penyewa {$tenantUser->name} mengajukan pembatalan booking #{$detail->fk_booking_id}. Alasan: {$reason}",
+                    'type' => 'cancel_request',
+                    'booking_id' => $detail->fk_booking_id,
                     'booking_detail_id' => $detail->id,
-                    'url'               => "/admin/detail-booking/{$detail->fk_booking_id}",
-                    'sender_id'         => $tenantUser->id,
-                    'sender_name'       => $tenantUser->name,
-                    'sender_role'       => 'tenant',
+                    'url' => "/admin/detail-booking/{$detail->fk_booking_id}",
+                    'sender_id' => $tenantUser->id,
+                    'sender_name' => $tenantUser->name,
+                    'sender_role' => 'tenant',
                 ]));
             }
 
@@ -111,19 +137,30 @@ class TenantCancelBookingService
                 $owner = User::find($field->fk_user_id);
                 if ($owner) {
                     $owner->notify(new GeneralBookingNotification([
-                        'title'             => 'Info Pengajuan Pembatalan',
-                        'message'           => "Penyewa {$tenantUser->name} mengajukan pembatalan booking #{$detail->fk_booking_id} pada {$field->name}.",
-                        'type'              => 'cancel_info',
-                        'booking_id'        => $detail->fk_booking_id,
+                        'title' => 'Info Pengajuan Pembatalan',
+                        'message' => "Penyewa {$tenantUser->name} mengajukan pembatalan booking #{$detail->fk_booking_id} pada {$field->name}.",
+                        'type' => 'cancel_info',
+                        'booking_id' => $detail->fk_booking_id,
                         'booking_detail_id' => $detail->id,
-                        'url'               => "/owner/detail-booking/{$detail->fk_booking_id}",
-                        'sender_id'         => $tenantUser->id,
-                        'sender_name'       => $tenantUser->name,
-                        'sender_role'       => 'tenant',
+                        'url' => "/owner/detail-booking/{$detail->fk_booking_id}",
+                        'sender_id' => $tenantUser->id,
+                        'sender_name' => $tenantUser->name,
+                        'sender_role' => 'tenant',
                     ]));
                 }
             }
         });
+    }
+
+    private function getPolicy(BookingDetail $detail): array
+    {
+        $field = $detail->booking->field;
+
+        return $this->refundRuleService->getPolicy(
+            (int) $field->id,
+            'cancel',
+            Carbon::parse($detail->play_date.' '.$detail->start_play_time, config('app.timezone'))
+        );
     }
 
     public function calculatePaymentTotals(BookingDetail $detail): int

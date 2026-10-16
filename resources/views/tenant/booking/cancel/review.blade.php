@@ -25,21 +25,27 @@
         </div>
 
         <div class="flex justify-between items-center mb-6">
-            <h3 class="font-bold text-gray-800 text-sm">Status Pembayaran</h3>
-            <span class="text-xs font-black uppercase tracking-wide px-3 py-1 border rounded-tenant-sm {{ $isRefundable ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200' }}">
-                {{ $isRefundable ? 'DP dikembalikan' : 'DP hangus' }}
+            <h3 class="font-bold text-gray-800 text-sm">Estimasi Kebijakan Refund</h3>
+            <span class="text-xs font-black uppercase tracking-wide px-3 py-1 border rounded-tenant-sm {{ $currentPercent !== null ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-600 border-gray-200' }}">
+                {{ $currentPercent !== null ? "Estimasi {$currentPercent}%" : 'Tidak tersedia' }}
             </span>
         </div>
 
-        <div class="mb-8">
-            <button type="button" id="toggleNotes" class="text-primary underline hover:text-primary-hover text-sm font-semibold transition-colors cursor-pointer outline-none">
-                Catatan kebijakan pembatalan
-            </button>
-            <div id="notesContent" class="hidden mt-4 bg-gray-50 border border-gray-100 rounded-tenant-md p-4 text-sm text-gray-600 leading-relaxed flex flex-col gap-2 shadow-inner">
-                <p>Pembatalan yang dilakukan minimal H-3 sebelum jadwal bermain akan mendapatkan refund penuh dari DP yang sudah dibayarkan. Proses refund dilakukan otomatis dalam 1x24 jam setelah pembatalan berhasil dikonfirmasi.</p>
-                <p>Pembatalan yang dilakukan kurang dari H-3 sebelum jadwal bermain mengakibatkan DP hangus dan tidak dapat dikembalikan.</p>
-            </div>
-        </div>
+        <x-tenant.refund-terms
+            class="mb-8"
+            title="Syarat & Ketentuan Pembatalan"
+            :terms="$terms"
+            :deadline="$deadline"
+            :current-percent="$currentPercent"
+        />
+
+        @if (!$isPaid)
+            <p class="mb-6 text-sm text-red-700" role="alert">Pesanan yang belum dibayar tidak dapat diajukan cancel.</p>
+        @elseif (empty($terms))
+            <p class="mb-6 text-sm text-red-700" role="alert">Hubungi admin lapangan untuk kebijakan pembatalan.</p>
+        @elseif (!$canSubmit)
+            <p class="mb-6 text-sm text-red-700" role="alert">Mohon maaf, pengajuan cancel ditolak karena telah melewati batas maksimal waktu pengajuan.</p>
+        @endif
 
         <div class="flex flex-col sm:flex-row gap-4">
             <x-tenant-button href="javascript:history.back()" variant="danger" class="w-full sm:w-1/2 py-3">
@@ -50,7 +56,7 @@
                 @csrf
                 <input type="hidden" name="reason" value="{{ $validated['reason'] }}">
                 <input type="hidden" name="confirmed" value="1">
-                <x-tenant-button type="submit" variant="primary" class="w-full py-3 bg-red-600 hover:bg-red-700 shadow-tenant-sm">
+                <x-tenant-button type="submit" variant="primary" :disabled="!$canSubmit" class="w-full py-3 bg-red-600 hover:bg-red-700 shadow-tenant-sm">
                     Konfirmasi Pembatalan
                 </x-tenant-button>
             </form>

@@ -4,13 +4,13 @@ namespace App\Http\Controllers\Tenant\Booking;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Tenant\Booking\CancelBookingActionRequest;
-use App\Services\Tenant\Booking\TenantCancelBookingService;
 use App\Models\BookingDetail;
+use App\Services\Tenant\Booking\TenantCancelBookingService;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\View\View;
 use Illuminate\Support\Facades\Auth;
-use Throwable;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\View\View;
+use Throwable;
 
 class CancelledDetailBookingController extends Controller
 {
@@ -29,7 +29,7 @@ class CancelledDetailBookingController extends Controller
         $cancellationData = $this->cancelService->getCancellationData($detail);
 
         return view('tenant.booking.cancel.index', array_merge([
-            'detail' => $detail
+            'detail' => $detail,
         ], $cancellationData));
     }
 
@@ -42,8 +42,8 @@ class CancelledDetailBookingController extends Controller
         $cancellationData = $this->cancelService->getCancellationData($detail);
 
         return view('tenant.booking.cancel.review', array_merge([
-            'detail'    => $detail,
-            'validated' => $validated
+            'detail' => $detail,
+            'validated' => $validated,
         ], $cancellationData));
     }
 
@@ -63,7 +63,7 @@ class CancelledDetailBookingController extends Controller
             $response = redirect()->route('tenant.booking.history.show', $detail->fk_booking_id)
                 ->with('success', 'Booking berhasil dibatalkan.');
         } catch (Throwable $e) {
-            $response = redirect()->back()->with('error', 'Gagal membatalkan booking: ' . $e->getMessage());
+            $response = redirect()->back()->with('error', $e->getMessage());
         }
 
         return $response;

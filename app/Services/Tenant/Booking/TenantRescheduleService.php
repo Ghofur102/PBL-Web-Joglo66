@@ -10,6 +10,7 @@ use App\Models\FieldPrice;
 use App\Models\FieldWorker;
 use App\Models\User;
 use App\Notifications\GeneralBookingNotification;
+use App\Services\RefundRuleService;
 use Carbon\Carbon;
 use DomainException;
 use Illuminate\Database\Query\Builder;
@@ -23,6 +24,8 @@ class TenantRescheduleService
 {
     private const DB_CONN = 'mysql_joglo66_app';
 
+    public function __construct(private readonly RefundRuleService $refundRuleService) {}
+
     public function getFormPreparationData(BookingDetail $detail, array $params): array
     {
         $selectedDate = $params['date'] ?? date('Y-m-d');
@@ -34,8 +37,19 @@ class TenantRescheduleService
         $nextMonth = Carbon::create($year, $month, 1)->addMonth();
 
         $slots = $this->getSlotsForDate((int) $detail->booking->fk_field_id, $selectedDate, $detail);
+        $policy = $this->getPolicy($detail);
+        $isPaid = strtolower($detail->status) !== 'waiting';
 
-        return compact('calendar', 'month', 'year', 'selectedDate', 'prevMonth', 'nextMonth', 'slots');
+        return array_merge(
+            compact('calendar', 'month', 'year', 'selectedDate', 'prevMonth', 'nextMonth', 'slots'),
+            [
+                'terms' => $policy['terms'],
+                'deadline' => $policy['deadline'],
+                'currentPercent' => $policy['currentPercent'],
+                'isPaid' => $isPaid,
+                'canSubmit' => $isPaid && $policy['isWithinWindow'] && $policy['terms'] !== [],
+            ]
+        );
     }
 
     public function validateAndPrepareReview(BookingDetail $detail, array $newSlot): array
@@ -47,7 +61,7 @@ class TenantRescheduleService
         $oldPrice = (int) $detail->price;
         $priceDiff = $newPrice - $oldPrice;
 
-        return compact('newPrice', 'oldPrice', 'priceDiff');
+        return array_merge(compact('newPrice', 'oldPrice', 'priceDiff'), $this->getPolicy($detail));
     }
 
     public function executeReschedule(BookingDetail $detail, array $validated): void
@@ -75,15 +89,15 @@ class TenantRescheduleService
         DB::connection(self::DB_CONN)->transaction(function () use ($detail, $validated, $review, $tenantUser, $field) {
             BookingReschedule::create([
                 'fk_booking_detail_id' => $detail->id,
-                'old_date'             => $detail->play_date,
-                'new_play_date'        => $validated['new_play_date'],
-                'new_start_play_time'  => $validated['new_start_play_time'],
-                'new_end_play_time'    => $validated['new_end_play_time'],
-                'new_price'            => $review['newPrice'],
-                'status_refund'        => $this->determineStatusRefund($review['priceDiff']),
-                'reason'               => $validated['reason'],
-                'approval_status'      => 'pending',
-                'sender_by'            => 'tenant',
+                'old_date' => $detail->play_date,
+                'new_play_date' => $validated['new_play_date'],
+                'new_start_play_time' => $validated['new_start_play_time'],
+                'new_end_play_time' => $validated['new_end_play_time'],
+                'new_price' => $review['newPrice'],
+                'status_refund' => $this->determineStatusRefund($review['priceDiff']),
+                'reason' => $validated['reason'],
+                'approval_status' => 'pending',
+                'sender_by' => 'tenant',
             ]);
 
             $workerUserIds = FieldWorker::query()
@@ -93,15 +107,15 @@ class TenantRescheduleService
             $workers = User::whereIn('id', $workerUserIds)->get();
             if ($workers->isNotEmpty()) {
                 Notification::send($workers, new GeneralBookingNotification([
-                    'title'             => 'Pengajuan Reschedule Jadwal',
-                    'message'           => "Penyewa {$tenantUser->name} mengajukan pindah jadwal booking #{$detail->fk_booking_id} ke tanggal {$validated['new_play_date']} pukul {$validated['new_start_play_time']}.",
-                    'type'              => 'reschedule_request',
-                    'booking_id'        => $detail->fk_booking_id,
+                    'title' => 'Pengajuan Reschedule Jadwal',
+                    'message' => "Penyewa {$tenantUser->name} mengajukan pindah jadwal booking #{$detail->fk_booking_id} ke tanggal {$validated['new_play_date']} pukul {$validated['new_start_play_time']}.",
+                    'type' => 'reschedule_request',
+                    'booking_id' => $detail->fk_booking_id,
                     'booking_detail_id' => $detail->id,
-                    'url'               => "/admin/detail-booking/{$detail->fk_booking_id}",
-                    'sender_id'         => $tenantUser->id,
-                    'sender_name'       => $tenantUser->name,
-                    'sender_role'       => 'tenant',
+                    'url' => "/admin/detail-booking/{$detail->fk_booking_id}",
+                    'sender_id' => $tenantUser->id,
+                    'sender_name' => $tenantUser->name,
+                    'sender_role' => 'tenant',
                 ]));
             }
 
@@ -109,15 +123,15 @@ class TenantRescheduleService
                 $owner = User::find($field->fk_user_id);
                 if ($owner) {
                     $owner->notify(new GeneralBookingNotification([
-                        'title'             => 'Info Pengajuan Reschedule',
-                        'message'           => "Penyewa {$tenantUser->name} mengajukan reschedule booking #{$detail->fk_booking_id} pada {$field->name}.",
-                        'type'              => 'reschedule_info',
-                        'booking_id'        => $detail->fk_booking_id,
+                        'title' => 'Info Pengajuan Reschedule',
+                        'message' => "Penyewa {$tenantUser->name} mengajukan reschedule booking #{$detail->fk_booking_id} pada {$field->name}.",
+                        'type' => 'reschedule_info',
+                        'booking_id' => $detail->fk_booking_id,
                         'booking_detail_id' => $detail->id,
-                        'url'               => "/owner/detail-booking/{$detail->fk_booking_id}",
-                        'sender_id'         => $tenantUser->id,
-                        'sender_name'       => $tenantUser->name,
-                        'sender_role'       => 'tenant',
+                        'url' => "/owner/detail-booking/{$detail->fk_booking_id}",
+                        'sender_id' => $tenantUser->id,
+                        'sender_name' => $tenantUser->name,
+                        'sender_role' => 'tenant',
                     ]));
                 }
             }
@@ -127,18 +141,18 @@ class TenantRescheduleService
     public function checkRescheduleRules(BookingDetail $detail): void
     {
         $field = $detail->booking->field;
-        $minRescheduleDays = (int) ($field->min_reschedule_days ?? 3);
         $maxRescheduleTimes = (int) ($field->max_reschedule_times ?? 1);
 
-        $playDate = Carbon::parse($detail->play_date)->startOfDay();
-        $daysUntilPlay = Carbon::now()->startOfDay()->diffInDays($playDate, false);
-
-        if ($daysUntilPlay < $minRescheduleDays) {
-            throw new UnexpectedValueException("Reschedule hanya bisa dilakukan minimal H-{$minRescheduleDays} sebelum jadwal bermain.");
+        if (strtolower($detail->status) === 'waiting') {
+            throw new UnexpectedValueException('Pesanan yang belum dibayar tidak dapat diajukan reschedule.');
         }
 
-        if (strtolower($detail->status) === 'waiting') {
-            throw new UnexpectedValueException('Fitur reschedule tidak tersedia. Silakan selesaikan pembayaran terlebih dahulu.');
+        $policy = $this->getPolicy($detail);
+        if ($policy['terms'] === []) {
+            throw new UnexpectedValueException('Hubungi admin lapangan untuk kebijakan reschedule.');
+        }
+        if (! $policy['isWithinWindow']) {
+            throw new UnexpectedValueException('Mohon maaf, pengajuan reschedule ditolak karena telah melewati batas maksimal waktu pengajuan.');
         }
 
         $rescheduleCount = BookingReschedule::query()
@@ -151,10 +165,21 @@ class TenantRescheduleService
         }
     }
 
+    private function getPolicy(BookingDetail $detail): array
+    {
+        $field = $detail->booking->field;
+
+        return $this->refundRuleService->getPolicy(
+            (int) $field->id,
+            'reschedule',
+            Carbon::parse($detail->play_date.' '.$detail->start_play_time, config('app.timezone'))
+        );
+    }
+
     private function checkSlotConflict(BookingDetail $detail, array $newSlot): void
     {
-        $newStart = $newSlot['new_start_play_time'] . ':00';
-        $newEnd = $newSlot['new_end_play_time'] . ':00';
+        $newStart = $newSlot['new_start_play_time'].':00';
+        $newEnd = $newSlot['new_end_play_time'].':00';
 
         if ($newSlot['new_play_date'] === $detail->play_date && $newStart >= $detail->start_play_time && $newEnd <= $detail->end_play_time) {
             throw new UnexpectedValueException('Anda tidak bisa memilih waktu yang menjadi bagian dari jadwal Anda saat ini.');
@@ -180,8 +205,8 @@ class TenantRescheduleService
     {
         $isClosed = false;
         if (Schema::connection(self::DB_CONN)->hasTable('field_closures')) {
-            $newStartDT = $newSlot['new_play_date'] . ' ' . $newStart;
-            $newEndDT = $newSlot['new_play_date'] . ' ' . $newEnd;
+            $newStartDT = $newSlot['new_play_date'].' '.$newStart;
+            $newEndDT = $newSlot['new_play_date'].' '.$newEnd;
 
             $isClosed = DB::connection(self::DB_CONN)->table('field_closures')
                 ->where('fk_field_id', $detail->booking->fk_field_id)
@@ -205,7 +230,7 @@ class TenantRescheduleService
             ->where('end_time', '>=', $newSlot['new_end_play_time'])
             ->value('price');
 
-        if (!$price) {
+        if (! $price) {
             throw new UnexpectedValueException('Harga untuk jadwal baru tidak ditemukan.');
         }
 
@@ -219,6 +244,7 @@ class TenantRescheduleService
         } elseif ($priceDiff < 0) {
             return 'refund required';
         }
+
         return 'none';
     }
 
@@ -231,11 +257,11 @@ class TenantRescheduleService
         $days = [];
         for ($current = $start->copy(); $current <= $end; $current->addDay()) {
             $days[] = [
-                'date'           => $current->format('Y-m-d'),
-                'day'            => (int) $current->format('j'),
+                'date' => $current->format('Y-m-d'),
+                'day' => (int) $current->format('j'),
                 'isCurrentMonth' => $current->month === $month,
-                'isToday'        => $current->isToday(),
-                'isPast'         => $current->isPast() && !$current->isToday(),
+                'isToday' => $current->isToday(),
+                'isPast' => $current->isPast() && ! $current->isToday(),
             ];
         }
 
@@ -269,8 +295,8 @@ class TenantRescheduleService
         if (Schema::connection(self::DB_CONN)->hasTable('field_closures')) {
             $closures = DB::connection(self::DB_CONN)->table('field_closures')
                 ->where('fk_field_id', $fieldId)
-                ->where('field_closure_start_time', '<=', $date . ' 23:59:59')
-                ->where('field_closure_end_time', '>=', $date . ' 00:00:00')
+                ->where('field_closure_start_time', '<=', $date.' 23:59:59')
+                ->where('field_closure_end_time', '>=', $date.' 00:00:00')
                 ->get()
                 ->toArray();
         }
@@ -294,12 +320,12 @@ class TenantRescheduleService
                 $isOriginalSlot = ($date === $originalDetail->play_date) && ($slotStartDB >= $originalDetail->start_play_time && $slotEndDB <= $originalDetail->end_play_time);
 
                 $slots[] = [
-                    'start'        => $current->format('H:i'),
-                    'end'          => $current->copy()->addHour()->format('H:i'),
-                    'price'        => $rule->price,
-                    'is_available' => !$isOccupiedByOther && !$isClosed && !$isOriginalSlot,
-                    'is_original'  => $isOriginalSlot,
-                    'is_closed'    => $isClosed,
+                    'start' => $current->format('H:i'),
+                    'end' => $current->copy()->addHour()->format('H:i'),
+                    'price' => $rule->price,
+                    'is_available' => ! $isOccupiedByOther && ! $isClosed && ! $isOriginalSlot,
+                    'is_original' => $isOriginalSlot,
+                    'is_closed' => $isClosed,
                 ];
             }
         }
@@ -311,7 +337,7 @@ class TenantRescheduleService
     {
         $isClosed = false;
         foreach ($closures as $closure) {
-            if ($date . ' ' . $start < $closure->field_closure_end_time && $date . ' ' . $end > $closure->field_closure_start_time) {
+            if ($date.' '.$start < $closure->field_closure_end_time && $date.' '.$end > $closure->field_closure_start_time) {
                 $isClosed = true;
                 break;
             }
