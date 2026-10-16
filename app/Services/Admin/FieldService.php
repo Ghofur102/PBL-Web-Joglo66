@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Enums\GeneralStatus;
 use App\Enums\BookingDetailStatus;
 use App\Notifications\GeneralBookingNotification;
+use App\Services\RefundRuleService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -19,9 +20,13 @@ class FieldService
 {
     private const TIME_FORMAT = 'H:i:s';
 
+    public function __construct(private readonly RefundRuleService $refundRuleService)
+    {
+    }
+
     public function getFieldList(array $fieldIds, ?string $search, int $limit): array
     {
-        $query = Field::query();
+        $query = Field::query()->with('refundRules');
 
         if (!empty($fieldIds)) {
             $query->whereIn('id', $fieldIds);
@@ -44,14 +49,21 @@ class FieldService
                 'location' => $field->location ?? 'N/A',
                 'price'    => $field->price ?? 0,
                 'image'    => $field->image ?? null,
-                'status'   => $field->status ?? GeneralStatus::ACTIVE->value
+                'status'   => $field->status ?? GeneralStatus::ACTIVE->value,
+                'refund_rules' => $field->refundRules->map(fn($rule) => [
+                    'id' => $rule->id,
+                    'rule_type' => $rule->rule_type,
+                    'min_hours_before' => $rule->min_hours_before,
+                    'refund_percent' => $rule->refund_percent,
+                    'is_active' => $rule->is_active,
+                ])->values()->all(),
             ];
         })->toArray();
     }
 
     public function updateFieldAndPricing(Field $field, array $data, $request): Field
     {
-        return DB::transaction(function () use ($field, $data, $request) {
+        return $field->getConnection()->transaction(function () use ($field, $data, $request) {
             $fieldData = array_intersect_key($data, array_flip(['name', 'description', 'category']));
 
             $newImageUrl = $this->processImageUpdate($field, $request);
@@ -67,7 +79,11 @@ class FieldService
                 $this->processPricingRulesUpdate($field, $request->pricing_rules);
             }
 
-            return $field->fresh(['fieldPrices']);
+            if (array_key_exists('refund_rules', $data)) {
+                $this->refundRuleService->syncRules($field, $data['refund_rules']);
+            }
+
+            return $field->fresh(['fieldPrices', 'refundRules']);
         });
     }
 
@@ -285,6 +301,7 @@ class FieldService
                 }
             }
         }
+
         return false;
     }
 
@@ -300,6 +317,7 @@ class FieldService
                 return true;
             }
         }
+
         return false;
     }
 }
