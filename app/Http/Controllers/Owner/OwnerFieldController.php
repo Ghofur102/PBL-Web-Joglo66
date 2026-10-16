@@ -56,33 +56,41 @@ class OwnerFieldController extends Controller
 
     public function update(OwnerFieldRequest $request, $id, RefundRuleService $refundRuleService): JsonResponse
     {
+        $status = 200;
+        $responseData = [];
+
         try {
             $field = Field::where('id', $id)
                 ->where('fk_user_id', Auth::id())
                 ->first();
 
             if (! $field) {
-                return response()->json(['success' => false, 'message' => 'Lapangan tidak ditemukan atau bukan milik Anda.'], 404);
+                $status = 404;
+                $responseData = ['success' => false, 'message' => 'Lapangan tidak ditemukan atau bukan milik Anda.'];
+            } else {
+                $payload = $request->validated();
+                $refundRules = $payload['refund_rules'] ?? null;
+                unset($payload['refund_rules']);
+
+                $field = $field->getConnection()->transaction(function () use ($field, $payload, $refundRules, $refundRuleService) {
+                    $field->update($payload);
+                    if ($refundRules !== null) {
+                        $refundRuleService->syncRules($field, $refundRules);
+                    }
+
+                    return $field->fresh(['fieldPrices', 'refundRules']);
+                });
+
+                $responseData = ['success' => true, 'message' => 'Lapangan berhasil diperbarui.', 'data' => $field];
             }
-
-            $payload = $request->validated();
-            $refundRules = $payload['refund_rules'] ?? null;
-            unset($payload['refund_rules']);
-
-            $field = $field->getConnection()->transaction(function () use ($field, $payload, $refundRules, $refundRuleService) {
-                $field->update($payload);
-                if ($refundRules !== null) {
-                    $refundRuleService->syncRules($field, $refundRules);
-                }
-
-                return $field->fresh(['fieldPrices', 'refundRules']);
-            });
-
-            return response()->json(['success' => true, 'message' => 'Lapangan berhasil diperbarui.', 'data' => $field], 200);
         } catch (ValidationException $e) {
-            return response()->json(['success' => false, 'message' => $e->validator->errors()->first(), 'errors' => $e->errors()], 422);
+            $status = 422;
+            $responseData = ['success' => false, 'message' => $e->validator->errors()->first(), 'errors' => $e->errors()];
         } catch (Throwable $e) {
-            return response()->json(['success' => false, 'message' => 'Gagal mengupdate lapangan.'], 500);
+            $status = 500;
+            $responseData = ['success' => false, 'message' => 'Gagal mengupdate lapangan.'];
         }
+
+        return response()->json($responseData, $status);
     }
 }

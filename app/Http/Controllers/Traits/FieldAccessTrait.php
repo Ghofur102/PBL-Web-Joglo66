@@ -30,17 +30,13 @@ trait FieldAccessTrait
             return false;
         }
 
-        if ($user->role === 'owner') {
-            return Field::query()->where('id', $fieldId)->where('fk_user_id', $user->id)->exists();
-        }
-
-        if (in_array($user->role, ['worker', 'treasurer'], true)) {
-            return DB::table('field_workers')
+        return match ($user->role) {
+            'owner' => Field::query()->where('id', $fieldId)->where('fk_user_id', $user->id)->exists(),
+            'worker', 'treasurer' => DB::table('field_workers')
                 ->where('fk_user_id', $user->id)
                 ->where('fk_field_id', $fieldId)
-                ->exists();
-        }
-
-        return false;
+                ->exists(),
+            default => false,
+        };
     }
 }
