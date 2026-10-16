@@ -16,7 +16,6 @@
                     PERINGATAN: ATURAN RESCHEDULE
                 </p>
                 <ul class="list-disc list-inside text-sm text-amber-700 space-y-1 ml-1 mt-1">
-                    <li>Reschedule hanya bisa dilakukan <strong>minimal H-3</strong> sebelum jadwal bermain.</li>
                     <li>Reschedule hanya <strong>1 kali</strong> per sesi booking.</li>
                     <li>Slot lama akan otomatis dibuka setelah reschedule berhasil.</li>
                 </ul>
@@ -34,9 +33,25 @@
             </div>
         </x-tenant-card>
 
+        <x-tenant.refund-terms
+            class="mb-8"
+            title="Syarat & Ketentuan Reschedule"
+            :terms="$terms"
+            :deadline="$deadline"
+            :current-percent="$currentPercent"
+        />
+
+        @if (!$isPaid)
+            <p class="mb-6 text-sm text-red-700" role="alert">Pesanan yang belum dibayar tidak dapat diajukan reschedule.</p>
+        @elseif (empty($terms))
+            <p class="mb-6 text-sm text-red-700" role="alert">Hubungi admin lapangan untuk kebijakan reschedule.</p>
+        @elseif (!$canSubmit)
+            <p class="mb-6 text-sm text-red-700" role="alert">Mohon maaf, pengajuan reschedule ditolak karena telah melewati batas maksimal waktu pengajuan.</p>
+        @endif
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
 
-            <div id="slot-section" data-view-date="{{ $selectedDate }}"
+            <div id="slot-section" data-view-date="{{ $selectedDate }}" data-can-submit="{{ $canSubmit ? 'true' : 'false' }}"
                 data-formatted-date="{{ \Carbon\Carbon::parse($selectedDate)->translatedFormat('d F Y') }}"
                 class="bg-white p-6 rounded-tenant-lg border border-gray-200 shadow-tenant-sm transition-opacity duration-300 flex flex-col">
                 <h3 class="text-lg font-bold text-gray-800 mb-1">Slot Jam Tersedia</h3>
@@ -188,7 +203,7 @@
                     <x-tenant-button :href="route('tenant.booking.history.show', $detail->fk_booking_id)" variant="danger" class="px-6 py-2.5">
                         Kembali
                     </x-tenant-button>
-                    <x-tenant-button type="button" id="btnConfirm" disabled variant="primary"
+                    <x-tenant-button type="button" id="btnConfirm" :disabled="!$canSubmit" variant="primary"
                         class="px-6 py-2.5 shadow-tenant-sm">
                         Lanjut Konfirmasi
                     </x-tenant-button>

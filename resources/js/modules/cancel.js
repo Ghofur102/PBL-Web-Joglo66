@@ -18,13 +18,14 @@ function updateSubmitState() {
     const reasonValue = (formUi.reasonHidden?.value || textarea?.value || '').trim();
     const hasReason = reasonValue.length > 0;
     const isAgreed = formUi.agreeCheck?.checked ?? false;
+    const isPolicyEligible = formUi.btnSubmit?.dataset?.policyEligible !== 'false';
 
     if (formUi.reasonHidden && hasReason) {
         formUi.reasonHidden.value = reasonValue;
     }
 
     if (formUi.btnSubmit) {
-        if (hasReason && isAgreed) {
+        if (hasReason && isAgreed && isPolicyEligible) {
             formUi.btnSubmit.removeAttribute('disabled');
             formUi.btnSubmit.disabled = false;
         } else {
@@ -121,7 +122,7 @@ export function initializeCancelForm() {
             const textarea = getTextareaElement();
             const reason = (formUi.reasonHidden?.value || textarea?.value || '').trim();
 
-            if (!reason || !formUi.agreeCheck?.checked) {
+            if (!reason || !formUi.agreeCheck?.checked || formUi.btnSubmit?.dataset?.policyEligible === 'false') {
                 updateSubmitState();
                 return;
             }

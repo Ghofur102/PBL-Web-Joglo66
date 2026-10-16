@@ -42,7 +42,9 @@ function handleSlotSelection(btn) {
     if (ui.endTimeInput) { ui.endTimeInput.value = selectedBooking.end; }
 
     updateSummaryLabels(price, selectedBooking.formattedDate, selectedBooking.start, selectedBooking.end);
-    ui.btnConfirm?.removeAttribute('disabled');
+    if (ui.slotSection?.dataset?.canSubmit === 'true') {
+        ui.btnConfirm?.removeAttribute('disabled');
+    }
 }
 
 function attachSlotListeners() {
@@ -59,6 +61,7 @@ function updateDOMContent(doc) {
         ui.slotSection.innerHTML = newSlotSection.innerHTML;
         ui.slotSection.dataset.viewDate = newSlotSection.dataset?.viewDate;
         ui.slotSection.dataset.formattedDate = newSlotSection.dataset?.formattedDate;
+        ui.slotSection.dataset.canSubmit = newSlotSection.dataset?.canSubmit;
     }
 
     if (ui.calendarSection && newCalendarSection) {

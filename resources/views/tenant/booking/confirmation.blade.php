@@ -15,6 +15,35 @@
         <input type="hidden" name="booking_data" value="{{ json_encode($groupedSlots) }}">
         <input type="hidden" name="total_price" value="{{ $totalPrice }}">
 
+        <div class="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <x-tenant.refund-terms
+                title="Syarat & Ketentuan Refund Pembatalan"
+                :terms="$refundTerms['cancel']"
+            />
+            <x-tenant.refund-terms
+                title="Syarat & Ketentuan Refund Reschedule"
+                :terms="$refundTerms['reschedule']"
+            />
+        </div>
+
+        <div class="mb-8">
+            <label for="refund_terms_accepted" class="flex items-start gap-3 rounded-tenant-md border border-gray-200 bg-white p-4 text-sm text-gray-700">
+                <input
+                    type="checkbox"
+                    id="refund_terms_accepted"
+                    name="refund_terms_accepted"
+                    value="1"
+                    required
+                    @checked(old('refund_terms_accepted'))
+                    class="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary focus:ring-primary"
+                >
+                <span>Saya telah membaca dan menyetujui syarat & ketentuan refund.</span>
+            </label>
+            @error('refund_terms_accepted')
+                <p class="mt-2 text-sm text-red-600" role="alert">{{ $message }}</p>
+            @enderror
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
 
             <x-tenant-card variant="default" class="flex flex-col gap-6">

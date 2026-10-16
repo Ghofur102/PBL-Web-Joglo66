@@ -50,38 +50,21 @@
         </x-tenant-card>
     </div>
 
-    <x-tenant-card variant="flat" class="mb-6 p-0 overflow-hidden">
-        <div class="bg-primary-light px-5 py-3 border-b border-gray-200">
-            <h2 class="font-bold text-gray-900 text-sm">Syarat & Ketentuan Pembatalan</h2>
-        </div>
-        <div class="divide-y divide-gray-100 px-5 py-2">
-            <div class="flex items-start gap-3 py-3">
-                <svg class="w-5 h-5 text-primary shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2"
-                    viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
-                </svg>
-                <p class="text-sm text-gray-700">Pembatalan maksimal dilakukan <strong>H-3</strong> sebelum jadwal bermain.
-                </p>
-            </div>
-            <div class="flex items-start gap-3 py-3">
-                <svg class="w-5 h-5 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2"
-                    viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 9v2m0 4h.01M10.29 3.86l-8.3 14.42A1.5 1.5 0 003.7 20h16.6a1.5 1.5 0 001.31-2.22l-8.3-14.42a1.5 1.5 0 00-2.62 0z" />
-                </svg>
-                <p class="text-sm text-gray-700">Jika melewati batas waktu, <strong>DP hangus</strong> dan tidak dapat
-                    dikembalikan.</p>
-            </div>
-            <div class="flex items-start gap-3 py-3">
-                <svg class="w-5 h-5 text-primary shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2"
-                    viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-                <p class="text-sm text-gray-700">Jika sesuai syarat, DP dapat dikembalikan sesuai kebijakan refund.</p>
-            </div>
-        </div>
-    </x-tenant-card>
+    <x-tenant.refund-terms
+        class="mb-6"
+        title="Syarat & Ketentuan Pembatalan"
+        :terms="$terms"
+        :deadline="$deadline"
+        :current-percent="$currentPercent"
+    />
+
+    @if (!$isPaid)
+        <p class="mb-6 text-sm text-red-700" role="alert">Pesanan yang belum dibayar tidak dapat diajukan cancel.</p>
+    @elseif (empty($terms))
+        <p class="mb-6 text-sm text-red-700" role="alert">Hubungi admin lapangan untuk kebijakan pembatalan.</p>
+    @elseif (!$canSubmit)
+        <p class="mb-6 text-sm text-red-700" role="alert">Mohon maaf, pengajuan cancel ditolak karena telah melewati batas maksimal waktu pengajuan.</p>
+    @endif
 
     <x-tenant-card variant="flat" class="mb-6 p-0 overflow-hidden">
         <div class="bg-primary-light px-5 py-3 border-b border-gray-200">
@@ -114,29 +97,17 @@
         </div>
         <div class="px-5 py-4 space-y-3 border-b border-gray-100">
             <div class="flex justify-between text-sm">
-                <span class="text-gray-600">Nominal DP</span>
+                <span class="text-gray-600">Total pembayaran diterima</span>
                 <span class="font-semibold text-gray-900">Rp {{ number_format($netPaid, 0, ',', '.') }}</span>
             </div>
             <div class="flex justify-between text-sm">
-                <span class="text-gray-600">Nominal yang Dikembalikan</span>
-                <span class="font-bold text-green-600">Rp
-                    {{ number_format($isRefundable ? $refundAmount : 0, 0, ',', '.') }}</span>
-            </div>
-            <div class="flex justify-between text-sm">
-                <span class="text-gray-600">Nominal yang Hangus</span>
-                <span class="font-bold text-red-600">Rp
-                    {{ number_format($isRefundable ? 0 : $netPaid, 0, ',', '.') }}</span>
-            </div>
-            <div class="flex justify-between text-sm border-t border-gray-200 pt-3">
-                <span class="font-bold text-gray-800">Total Refund</span>
-                <span class="font-black text-primary text-base">Rp
-                    {{ number_format($isRefundable ? $refundAmount : 0, 0, ',', '.') }}</span>
-            </div>
-            <div class="flex justify-between text-sm items-center">
-                <span class="text-gray-600">Status Proses Refund</span>
-                <span
-                    class="text-xs bg-gray-100 px-2.5 py-1 rounded-tenant-sm font-bold text-gray-500 uppercase tracking-wide">
-                    {{ $isRefundable ? 'Akan diproses setelah konfirmasi' : 'Tidak ada refund (DP Hangus)' }}
+                <span class="text-gray-600">Estimasi nominal refund menurut aturan saat ini</span>
+                <span class="font-bold text-green-600">
+                    @if ($estimateRefundAmount !== null)
+                        Rp {{ number_format($estimateRefundAmount, 0, ',', '.') }}
+                    @else
+                        Belum tersedia
+                    @endif
                 </span>
             </div>
         </div>
@@ -146,7 +117,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
             </svg>
-            <span>Refund akan diproses secara otomatis dalam 1x24 jam setelah pembatalan berhasil dikonfirmasi.</span>
+            <span>Nilai ini merupakan estimasi berdasarkan aturan aktif. Keputusan dan nominal akhir ditetapkan admin.</span>
         </div>
     </x-tenant-card>
 
@@ -158,12 +129,13 @@
         <div class="flex flex-col gap-4">
             <div class="w-full sm:w-auto">
                 <x-tenant-button type="button" id="btnSubmit" disabled variant="primary"
+                    data-policy-eligible="{{ $canSubmit ? 'true' : 'false' }}"
                     class="px-8 py-3 shadow-tenant-sm">
                     Lanjut Konfirmasi &rarr;
                 </x-tenant-button>
             </div>
 
-            <label class="flex items-start gap-3 cursor-pointer w-fit">
+            <label for="agreeCheck" class="flex items-start gap-3 cursor-pointer w-fit">
                 <input type="checkbox" id="agreeCheck"
                     class="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary cursor-pointer mt-0.5">
                 <span class="text-sm text-gray-600 font-medium">Dengan menekan tombol ini, anda menyetujui syarat dan

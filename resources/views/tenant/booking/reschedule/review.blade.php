@@ -21,6 +21,14 @@
             </div>
         </div>
 
+        <x-tenant.refund-terms
+            class="mb-8"
+            title="Syarat & Ketentuan Reschedule"
+            :terms="$terms"
+            :deadline="$deadline"
+            :current-percent="$currentPercent"
+        />
+
         <hr class="border-gray-200 mb-6">
 
         <div class="space-y-4 mb-8 text-sm">
