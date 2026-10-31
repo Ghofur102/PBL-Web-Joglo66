@@ -21,7 +21,9 @@ use App\Http\Controllers\Owner\EmployeeController;
 use App\Http\Controllers\Owner\OwnerFieldController;
 use App\Http\Controllers\Owner\DownloadReportController;
 
-const ROUTE_LOGOUT = '/logout';
+if (!defined('ROUTE_LOGOUT')) {
+    define('ROUTE_LOGOUT', '/logout');
+}
 
 Route::post('/duitku/callback', [DuitkuController::class, 'callback']);
 
