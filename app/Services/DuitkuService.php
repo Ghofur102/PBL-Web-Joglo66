@@ -13,10 +13,10 @@ class DuitkuService
 
     public function __construct()
     {
-        $this->merchantCode = trim(config('services.duitku.merchant_code') ?? env('DUITKU_MERCHANT_CODE', ''));
-        $this->merchantKey  = trim(config('services.duitku.merchant_key') ?? env('DUITKU_MERCHANT_KEY', ''));
+        $this->merchantCode = trim(env('DUITKU_MERCHANT_CODE', ''));
+        $this->merchantKey  = trim(env('DUITKU_MERCHANT_KEY', ''));
 
-        $sandboxRaw = config('services.duitku.sandbox_mode') ?? env('DUITKU_SANDBOX_MODE', true);
+        $sandboxRaw = env('DUITKU_SANDBOX_MODE', true);
         $this->sandboxMode  = filter_var($sandboxRaw, FILTER_VALIDATE_BOOLEAN);
     }
 
@@ -25,6 +25,7 @@ class DuitkuService
         $merchantOrderId = $booking->id . '-' . time();
         $amountInt = (int) round($amount);
 
+        // Pastikan signature dibuat dengan urutan yang benar sesuai dokumentasi (Code + OrderId + Amount + Key)
         $rawSignatureString = $this->merchantCode . $merchantOrderId . $amountInt . $this->merchantKey;
         $signature = md5($rawSignatureString);
 
@@ -51,39 +52,40 @@ class DuitkuService
             'signature'         => $signature,
         ];
 
-        // Daftar URL endpoint Sandbox yang akan dicoba secara berurutan
-        $endpoints = $this->sandboxMode ? [
-            'https://api-sandbox.duitku.com/api/merchant/createInvoice',
-            'https://sandbox.duitku.com/webapi/api/merchant/v2/inquiry',
-            'https://api-sandbox.duitku.com/api/merchant/v2/inquiry',
-        ] : [
-            'https://api-prod.duitku.com/api/merchant/createInvoice',
-            'https://passport.duitku.com/webapi/api/merchant/v2/inquiry',
-        ];
+        // Tentukan URL 1 saja berdasarkan mode
+        $url = $this->sandboxMode
+            ? 'https://api-sandbox.duitku.com/api/merchant/createInvoice'
+            : 'https://api-prod.duitku.com/api/merchant/createInvoice';
 
-        $lastResponse = null;
-        foreach ($endpoints as $url) {
-            Log::info("Mencoba request Duitku ke URL: {$url}");
+        $maskedMerchantKey = strlen($this->merchantKey) <= 8
+            ? str_repeat('*', strlen($this->merchantKey))
+            : substr($this->merchantKey, 0, 4) . str_repeat('*', max(4, strlen($this->merchantKey) - 8)) . substr($this->merchantKey, -4);
 
-            $response = Http::withHeaders([
-                'User-Agent'   => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept'       => 'application/json',
-                'Content-Type' => 'application/json',
-            ])->post($url, $params);
+        Log::info("Konfigurasi Duitku", [
+            'mode' => $this->sandboxMode ? 'sandbox' : 'production',
+            'merchantCode' => $this->merchantCode,
+            'merchantKeyMasked' => $maskedMerchantKey,
+            'merchantKeyLength' => strlen($this->merchantKey),
+            'merchantKeyFingerprint' => substr(hash('sha256', $this->merchantKey), 0, 12),
+        ]);
 
-            $lastResponse = $response;
-            $data = $response->json();
+        Log::info("Mencoba request Duitku ke URL: {$url}");
 
-            if ($response->successful() && isset($data['statusCode']) && $data['statusCode'] === '00') {
-                Log::info("Duitku Request Berhasil via URL: {$url}", ['response' => $data]);
-                return (object) $data;
-            }
+        $response = Http::withHeaders([
+            'Accept'       => 'application/json',
+            'Content-Type' => 'application/json',
+        ])->post($url, $params);
 
-            Log::warning("Duitku URL {$url} gagal [Status: " . $response->status() . "]", ['response' => $data]);
+        $data = $response->json();
+
+        if ($response->successful() && isset($data['statusCode']) && $data['statusCode'] === '00') {
+            Log::info("Duitku Request Berhasil", ['response' => $data]);
+            return (object) $data;
         }
 
-        $data = $lastResponse ? $lastResponse->json() : [];
-        $msg = $data['statusMessage'] ?? $data['Message'] ?? ($lastResponse ? $lastResponse->body() : 'No response');
-        throw new \Exception("Duitku Reject [HTTP " . ($lastResponse ? $lastResponse->status() : '0') . "]: " . $msg);
+        Log::warning("Duitku gagal [Status: " . $response->status() . "]", ['response' => $data]);
+
+        $msg = $data['statusMessage'] ?? $data['Message'] ?? $response->body();
+        throw new \Exception("Duitku Reject [HTTP " . $response->status() . "]: " . $msg);
     }
 }

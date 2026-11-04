@@ -22,11 +22,25 @@ class DownloadReportService
     {
         $token = PersonalAccessToken::findToken($validatedData['t']);
 
+        // celah keamanan: tidak ada pengecekan apakah user role owner pemilik dari lapangan yang ingin diunduh
         if (!$token || !$token->tokenable || $token->tokenable->role !== UserRole::OWNER->value) {
-            throw new HttpException(403, 'Akses Ditolak: Sesi Anda tidak valid atau Anda bukan Owner.');
+            throw new HttpException(403, 'Akses Ditolak: Sesi Anda tidak valid atau Anda bukan Owner. token = '.$token.' tokenable = '.$token?->tokenable.' role = '.$token?->tokenable?->role);
         }
 
-        $data = $this->financialReportService->getMonthlyData((int) $validatedData['bulan'], (int) $validatedData['tahun']);
+        $report = $this->financialReportService->getMonthlyReport((int) $validatedData['bulan'], (int) $validatedData['tahun']);
+        $summary = $report['summary'] ?? $report;
+        $transactions = $report['transactions'] ?? [];
+        $data = [
+            'month' => Carbon::create((int) $validatedData['tahun'], (int) $validatedData['bulan'], 1)->translatedFormat('F'),
+            'year' => (int) $validatedData['tahun'],
+            'total_income' => (int) ($summary['gross_income'] ?? 0),
+            'total_expense' => (int) ($summary['total_expense'] ?? 0),
+            'net_profit' => (int) ($summary['net_profit'] ?? 0),
+            'details' => [
+                'income' => array_values(array_filter($transactions, fn ($transaction) => ($transaction['type'] ?? null) !== 'expense')),
+                'expense' => array_values(array_filter($transactions, fn ($transaction) => ($transaction['type'] ?? null) === 'expense')),
+            ],
+        ];
 
         $html = view('pdf.laporan-bulanan', [
             'monthName'     => $data['month'],
