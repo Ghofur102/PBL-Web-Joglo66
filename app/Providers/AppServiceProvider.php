@@ -16,7 +16,7 @@ class AppServiceProvider extends ServiceProvider
      * Bootstrap any application services.
      */
     public function boot(): void {
-        if (str_contains(request()->getHost(), 'ngrok') || request()->header('x-forwarded-proto') === 'https') {
+        if (app()->environment('production') || request()->header('x-forwarded-proto') === 'https' || str_contains(request()->getHost(), 'poliwangi.ac.id') || str_contains(request()->getHost(), 'ngrok')) {
             URL::forceScheme('https');
         }
     }
