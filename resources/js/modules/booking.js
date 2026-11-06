@@ -194,7 +194,14 @@ function renderSlotJam(ctx) {
     if (!slotGrid) return;
     slotGrid.innerHTML = '';
 
-    if (ctx.allSlots.length === 0) return;
+    if (ctx.allSlots.length === 0) {
+        slotGrid.innerHTML = `
+            <div class="col-span-2 text-center py-8 text-gray-400 text-sm bg-gray-50 rounded-tenant-md border border-dashed border-gray-300">
+                Belum ada jadwal slot atau tarif yang tersedia untuk tanggal ini.
+            </div>
+        `;
+        return;
+    }
 
     const dateStr = getLocalDateFormat(ctx.selectedDate);
     const now = new Date();
