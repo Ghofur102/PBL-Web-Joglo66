@@ -4,33 +4,44 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Exception;
 
 class DuitkuService
 {
-    protected $merchantCode;
-    protected $merchantKey;
-    protected $sandboxMode;
+    protected string $merchantCode;
+    protected string $apiKey;
+    protected bool $sandboxMode;
 
     public function __construct()
     {
-        $this->merchantCode = trim(env('DUITKU_MERCHANT_CODE', ''));
-        $this->merchantKey  = trim(env('DUITKU_MERCHANT_KEY', ''));
+        $this->merchantCode = trim((string) (config('duitku.merchant_code') ?: config('services.duitku.merchant_code') ?: env('DUITKU_MERCHANT_CODE', '')));
+        $this->apiKey       = trim((string) (config('duitku.api_key') ?: config('services.duitku.merchant_key') ?: env('DUITKU_API_KEY', env('DUITKU_MERCHANT_KEY', ''))));
 
-        $sandboxRaw = env('DUITKU_SANDBOX_MODE', true);
+        $sandboxRaw = config('duitku.sandbox', config('services.duitku.sandbox_mode', env('DUITKU_SANDBOX', true)));
         $this->sandboxMode  = filter_var($sandboxRaw, FILTER_VALIDATE_BOOLEAN);
     }
 
-    public function createInvoice($booking, $amount)
+    /**
+     * Membuat invoice pembayaran menggunakan Duitku POP (Hosted Payment Checkout).
+     *
+     * @param  mixed  $booking
+     * @param  int|float  $amount
+     * @return object
+     * @throws Exception
+     */
+    public function createInvoice($booking, $amount): object
     {
+        if (empty($this->merchantCode) || empty($this->apiKey)) {
+            Log::error('Duitku Error: DUITKU_MERCHANT_CODE atau DUITKU_API_KEY belum dikonfigurasi di file .env.');
+            throw new Exception('Konfigurasi Duitku belum lengkap. Pastikan DUITKU_MERCHANT_CODE dan DUITKU_API_KEY sudah diisi di file .env.');
+        }
+
         $merchantOrderId = $booking->id . '-' . time();
         $amountInt = (int) round($amount);
 
-        // Pastikan signature dibuat dengan urutan yang benar sesuai dokumentasi (Code + OrderId + Amount + Key)
-        $rawSignatureString = $this->merchantCode . $merchantOrderId . $amountInt . $this->merchantKey;
-        $signature = md5($rawSignatureString);
-
+        // Validasi nomor telepon dan email
         $cleanPhone = preg_replace('/[^0-9]/', '', $booking->customer_phone ?? '');
-        if (empty($cleanPhone)) {
+        if (empty($cleanPhone) || strlen($cleanPhone) < 8) {
             $cleanPhone = '08123456789';
         }
 
@@ -38,54 +49,99 @@ class DuitkuService
             ? $booking->customer_email
             : 'customer@joglo66.com';
 
-        $params = [
-            'merchantCode'      => $this->merchantCode,
-            'paymentAmount'     => $amountInt,
-            'merchantOrderId'   => $merchantOrderId,
-            'productDetails'    => 'Penyewaan Lapangan - ' . ($booking->team_name ?? 'Customer'),
-            'email'             => $cleanEmail,
-            'phoneNumber'       => $cleanPhone,
-            'customerVaName'    => substr($booking->team_name ?? 'Customer', 0, 30),
-            'callbackUrl'       => env('APP_URL') . '/api/duitku/callback',
-            'returnUrl'         => route('tenant.booking.success', ['booking_id' => $booking->id]),
-            'expiryPeriod'      => 60,
-            'signature'         => $signature,
+        $productDetails = 'Penyewaan Lapangan - ' . ($booking->team_name ?? 'Customer');
+        $customerVaName = substr($booking->team_name ?? 'Customer', 0, 30);
+
+        // URL Callback & Return
+        $callbackUrl = config('duitku.callback_url') ?: url('/api/duitku/callback');
+        $returnUrl   = config('duitku.return_url') ?: route('tenant.booking.success', ['booking_id' => $booking->id]);
+        $expiryPeriod = (int) config('duitku.expiry_period', 60);
+
+        $itemDetails = [
+            [
+                'name'     => substr($productDetails, 0, 50),
+                'price'    => $amountInt,
+                'quantity' => 1,
+            ],
         ];
 
-        // Tentukan URL 1 saja berdasarkan mode
-        $url = $this->sandboxMode
-            ? 'https://api-sandbox.duitku.com/api/merchant/createInvoice'
-            : 'https://api-prod.duitku.com/api/merchant/createInvoice';
+        $payload = [
+            'paymentAmount'   => $amountInt,
+            'merchantOrderId' => $merchantOrderId,
+            'productDetails'  => $productDetails,
+            'email'           => $cleanEmail,
+            'phoneNumber'     => $cleanPhone,
+            'customerVaName'  => $customerVaName,
+            'callbackUrl'     => $callbackUrl,
+            'returnUrl'       => $returnUrl,
+            'expiryPeriod'    => $expiryPeriod,
+            'itemDetails'     => $itemDetails,
+        ];
 
-        $maskedMerchantKey = strlen($this->merchantKey) <= 8
-            ? str_repeat('*', strlen($this->merchantKey))
-            : substr($this->merchantKey, 0, 4) . str_repeat('*', max(4, strlen($this->merchantKey) - 8)) . substr($this->merchantKey, -4);
+        // Format Autentikasi Duitku POP API
+        // Endpoint: https://api-sandbox.duitku.com/api/merchant/createInvoice (Sandbox)
+        // Header Signature: SHA256(merchantCode + timestamp + apiKey)
+        $timestamp = (string) round(microtime(true) * 1000);
+        $signature = hash('sha256', $this->merchantCode . $timestamp . $this->apiKey);
 
-        Log::info("Konfigurasi Duitku", [
-            'mode' => $this->sandboxMode ? 'sandbox' : 'production',
-            'merchantCode' => $this->merchantCode,
-            'merchantKeyMasked' => $maskedMerchantKey,
-            'merchantKeyLength' => strlen($this->merchantKey),
-            'merchantKeyFingerprint' => substr(hash('sha256', $this->merchantKey), 0, 12),
+        $baseUrl = $this->sandboxMode ? 'https://api-sandbox.duitku.com' : 'https://api-prod.duitku.com';
+        $url = $baseUrl . '/api/merchant/createInvoice';
+
+        $headers = [
+            'x-duitku-signature'    => $signature,
+            'x-duitku-timestamp'    => $timestamp,
+            'x-duitku-merchantcode' => $this->merchantCode,
+            'Accept'                => 'application/json',
+            'Content-Type'          => 'application/json',
+        ];
+
+        Log::info('Duitku POP createInvoice: Mengirim request ke Duitku', [
+            'url'              => $url,
+            'merchantCode'     => $this->merchantCode,
+            'merchantOrderId'  => $merchantOrderId,
+            'amount'           => $amountInt,
+            'timestamp'        => $timestamp,
+            'callbackUrl'      => $callbackUrl,
+            'returnUrl'        => $returnUrl,
         ]);
 
-        Log::info("Mencoba request Duitku ke URL: {$url}");
+        try {
+            $response = Http::withHeaders($headers)
+                ->timeout(30)
+                ->post($url, $payload);
 
-        $response = Http::withHeaders([
-            'Accept'       => 'application/json',
-            'Content-Type' => 'application/json',
-        ])->post($url, $params);
+            $data = $response->json();
 
-        $data = $response->json();
+            Log::info('Duitku POP createInvoice: Response diterima', [
+                'http_status' => $response->status(),
+                'response'    => $data ?? $response->body(),
+            ]);
 
-        if ($response->successful() && isset($data['statusCode']) && $data['statusCode'] === '00') {
-            Log::info("Duitku Request Berhasil", ['response' => $data]);
-            return (object) $data;
+            if ($response->successful() && isset($data['statusCode']) && $data['statusCode'] === '00') {
+                return (object) [
+                    'statusCode'    => $data['statusCode'],
+                    'statusMessage' => $data['statusMessage'] ?? 'SUCCESS',
+                    'reference'     => $data['reference'] ?? null,
+                    'paymentUrl'    => $data['paymentUrl'] ?? null,
+                    'vaNumber'      => $data['vaNumber'] ?? null,
+                    'qrString'      => $data['qrString'] ?? null,
+                ];
+            }
+
+            // Jika status code bukan 00 atau HTTP gagal
+            $errorMessage = $data['statusMessage'] ?? $data['Message'] ?? $response->body();
+            Log::error('Duitku POP createInvoice: Duitku me-reject request', [
+                'http_status' => $response->status(),
+                'error'       => $errorMessage,
+                'raw_body'    => $response->body(),
+            ]);
+
+            throw new Exception("Duitku Reject [HTTP {$response->status()}]: {$errorMessage}");
+        } catch (Exception $e) {
+            Log::error('Duitku POP createInvoice: Exception saat request', [
+                'message' => $e->getMessage(),
+            ]);
+            throw $e;
         }
-
-        Log::warning("Duitku gagal [Status: " . $response->status() . "]", ['response' => $data]);
-
-        $msg = $data['statusMessage'] ?? $data['Message'] ?? $response->body();
-        throw new \Exception("Duitku Reject [HTTP " . $response->status() . "]: " . $msg);
     }
 }

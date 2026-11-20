@@ -21,6 +21,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectUsersTo(fn () => route('tenant.booking.dashboard'));
         $middleware->preventRequestForgery(except: [
             '/duitku/callback',
+            '/api/duitku/callback',
+            'duitku/*',
+            'api/duitku/*',
         ]);
         $middleware->append(SkipNgrokWarning::class); 
     })

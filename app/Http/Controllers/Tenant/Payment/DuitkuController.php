@@ -20,23 +20,31 @@ class DuitkuController extends Controller
         $this->duitkuService = $duitkuService;
     }
 
+    /**
+     * Endpoint Webhook / Callback dari Duitku.
+     * Menerima notifikasi perubahan status pembayaran dari Duitku.
+     */
     public function callback(DuitkuCallbackRequest $request): JsonResponse
     {
         $statusCode = 200;
-        $data = ['status' => 'Success'];
+        $data = ['status' => 'Success', 'message' => 'Callback berhasil diproses'];
 
         try {
-            $this->duitkuService->processWebhookCallback($request->validated());
+            $this->duitkuService->processWebhookCallback($request->all());
         } catch (InvalidArgumentException $e) {
             $statusCode = $e->getCode() ?: 400;
-            $data = ['status' => $e->getMessage()];
+            $data = ['status' => 'Bad Request', 'message' => $e->getMessage()];
+            Log::warning('DUITKU CALLBACK Gagal (Bad Request): ' . $e->getMessage());
         } catch (UnexpectedValueException $e) {
             $statusCode = $e->getCode() ?: 404;
-            $data = ['status' => $e->getMessage()];
+            $data = ['status' => 'Not Found', 'message' => $e->getMessage()];
+            Log::warning('DUITKU CALLBACK Gagal (Not Found): ' . $e->getMessage());
         } catch (Throwable $e) {
-            Log::error('Ada Error di Controller Callback: ' . $e->getMessage());
             $statusCode = 500;
-            $data = ['status' => 'Internal Server Error'];
+            $data = ['status' => 'Internal Server Error', 'message' => 'Terjadi kesalahan pada server.'];
+            Log::error('DUITKU CALLBACK Error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
         }
 
         return response()->json($data, $statusCode);

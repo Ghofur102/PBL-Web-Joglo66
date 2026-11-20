@@ -12,6 +12,10 @@ use App\Http\Controllers\Tenant\DashboardController;
 use App\Http\Middleware\CheckTenantRole;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Tenant\NotificationController;
+use App\Http\Controllers\Tenant\Payment\DuitkuController;
+
+// Webhook / Callback Duitku (dapat diakses via /duitku/callback maupun /api/duitku/callback)
+Route::post('/duitku/callback', [DuitkuController::class, 'callback'])->name('duitku.callback.web');
 
 // Pengalihan Halaman Utama ke Dashboard Tenant
 Route::get('/', function () {
@@ -44,7 +48,7 @@ Route::middleware('auth')->group(function () {
             Route::get('/create-form', [BookingController::class, 'createForm'])->name('tenant.booking.create-form');
             Route::post('/confirm-form', [BookingController::class, 'confirmForm'])->name('tenant.booking.confirm-form');
             Route::post('/store', [BookingController::class, 'store'])->name('tenant.booking.store');
-            Route::get('/success/{booking_id}', [BookingController::class, 'success'])->name('tenant.booking.success');
+            Route::match(['get', 'post'], '/success/{booking_id}', [BookingController::class, 'success'])->name('tenant.booking.success');
 
             // Sub-Modul Reschedule Sesi Jadwal Bermain (H-3)
             Route::get('/form-reschedule/{detail_booking_id}', [RescheduleDetailBookingController::class, 'formInput'])->name('tenant.booking.form.reschedule');
