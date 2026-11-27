@@ -22,10 +22,4 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
-/tests
-!/tests/
-/tests/*
-!/tests/Unit/
-/tests/Unit/*
-!/tests/Unit/Services/
-!/tests/Unit/Services/**
+
