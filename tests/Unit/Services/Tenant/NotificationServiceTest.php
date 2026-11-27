@@ -25,15 +25,7 @@ class NotificationServiceTest extends TestCase
         parent::setUp();
 
         $this->setUpInMemoryDatabase();
-
-        Schema::connection('mysql_joglo66_app')->create('users', function (Blueprint $table): void {
-            $table->id();
-            $table->string('name');
-            $table->string('email')->nullable();
-            $table->string('password')->nullable();
-            $table->string('role')->nullable();
-            $table->timestamps();
-        });
+        $this->createUsersTable();
         Schema::connection('mysql_joglo66_app')->create('notifications', function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->string('type');
@@ -46,7 +38,7 @@ class NotificationServiceTest extends TestCase
 
     public function test_get_paginated_notifications(): void
     {
-        $user = User::create(['name' => 'Tenant', 'email' => self::TENANT_EMAIL]);
+        $user = $this->createTenant();
         $this->addNotification($user);
         $this->addNotification($user);
 
@@ -59,7 +51,7 @@ class NotificationServiceTest extends TestCase
 
     public function test_get_unread_count(): void
     {
-        $user = User::create(['name' => 'Tenant', 'email' => self::TENANT_EMAIL]);
+        $user = $this->createTenant();
         $this->addNotification($user);
         $this->addNotification($user, now());
 
@@ -68,7 +60,7 @@ class NotificationServiceTest extends TestCase
 
     public function test_mark_as_read(): void
     {
-        $user = User::create(['name' => 'Tenant', 'email' => self::TENANT_EMAIL]);
+        $user = $this->createTenant();
         $notification = $this->addNotification($user);
 
         $result = (new NotificationService)->markAsRead($user, $notification);
@@ -80,7 +72,7 @@ class NotificationServiceTest extends TestCase
 
     public function test_mark_all_as_read(): void
     {
-        $user = User::create(['name' => 'Tenant', 'email' => self::TENANT_EMAIL]);
+        $user = $this->createTenant();
         $this->addNotification($user);
         $this->addNotification($user);
 
@@ -104,5 +96,10 @@ class NotificationServiceTest extends TestCase
         ]);
 
         return $id;
+    }
+
+    private function createTenant(): User
+    {
+        return User::create(['name' => 'Tenant', 'email' => self::TENANT_EMAIL]);
     }
 }

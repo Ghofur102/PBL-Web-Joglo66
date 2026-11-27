@@ -16,7 +16,10 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Owner\DownloadReportController;
 use App\Http\Controllers\Owner\EmployeeController;
 use App\Http\Controllers\Owner\OwnerFieldController;
-use App\Http\Controllers\Owner\DownloadReportController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\Tenant\Payment\DuitkuController;
+use App\Http\Controllers\Treasure\SalaryController;
+use Illuminate\Support\Facades\Route;
 
 if (!defined('ROUTE_LOGOUT')) {
     define('ROUTE_LOGOUT', '/logout');

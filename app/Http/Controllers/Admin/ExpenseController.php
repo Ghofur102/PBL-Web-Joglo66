@@ -17,6 +17,16 @@ class ExpenseController extends Controller
 
     private const SCRIPT_VALIDATION_RULE = 'not_regex:/<\s*script\b/i';
 
+    private const EXPENSE_VALIDATION_RULES = [
+        'name' => ['required', 'string', 'max:100', self::SCRIPT_VALIDATION_RULE],
+        'category' => 'required|string|max:50',
+        'quantity' => 'required|numeric|min:1',
+        'unit_price' => 'required|numeric|min:0',
+        'date' => 'required|date_format:Y-m-d',
+        'note' => ['nullable', 'string', self::SCRIPT_VALIDATION_RULE],
+        'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+    ];
+
     protected ExpenseService $expenseService;
 
     public function __construct(ExpenseService $expenseService)
@@ -31,7 +41,7 @@ class ExpenseController extends Controller
 
             return response()->json(['success' => true, 'data' => $expenses]);
         } catch (Throwable $e) {
-            return response()->json(['success' => false, 'message' => 'Gagal memuat data pengeluaran: '.$e->getMessage()], 500);
+            return $this->errorResponse($e, 'Gagal memuat data pengeluaran: ');
         }
     }
 
@@ -42,7 +52,7 @@ class ExpenseController extends Controller
 
             return response()->json(['success' => true, 'data' => $categories]);
         } catch (Throwable $e) {
-            return response()->json(['success' => false, 'message' => 'Gagal memuat daftar kategori: '.$e->getMessage()], 500);
+            return $this->errorResponse($e, 'Gagal memuat daftar kategori: ');
         }
     }
 
@@ -59,22 +69,13 @@ class ExpenseController extends Controller
 
     public function addExpense(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'name' => ['required', 'string', 'max:100', self::SCRIPT_VALIDATION_RULE],
-            'category' => 'required|string|max:50',
-            'quantity' => 'required|numeric|min:1',
-            'unit_price' => 'required|numeric|min:0',
-            'date' => 'required|date_format:Y-m-d',
-            'note' => ['nullable', 'string', self::SCRIPT_VALIDATION_RULE],
-            'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['success' => false, 'message' => $validator->errors()->first()], 422);
+        $validated = $this->validatedExpenseData($request);
+        if ($validated instanceof JsonResponse) {
+            return $validated;
         }
 
         try {
-            $expense = $this->expenseService->createExpense($validator->validated(), $request->user());
+            $expense = $this->expenseService->createExpense($validated, $request->user());
 
             return response()->json([
                 'success' => true,
@@ -82,24 +83,15 @@ class ExpenseController extends Controller
                 'data' => $expense,
             ], 201);
         } catch (Throwable $e) {
-            return response()->json(['success' => false, 'message' => 'Gagal menyimpan data ke database: '.$e->getMessage()], 500);
+            return $this->errorResponse($e, 'Gagal menyimpan data ke database: ');
         }
     }
 
     public function updateExpense(Request $request, $id): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'name' => ['required', 'string', 'max:100', self::SCRIPT_VALIDATION_RULE],
-            'category' => 'required|string|max:50',
-            'quantity' => 'required|numeric|min:1',
-            'unit_price' => 'required|numeric|min:0',
-            'date' => 'required|date_format:Y-m-d',
-            'note' => ['nullable', 'string', self::SCRIPT_VALIDATION_RULE],
-            'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['success' => false, 'message' => $validator->errors()->first()], 422);
+        $validated = $this->validatedExpenseData($request);
+        if ($validated instanceof JsonResponse) {
+            return $validated;
         }
 
         try {
@@ -113,7 +105,7 @@ class ExpenseController extends Controller
                 return response()->json(['success' => false, 'message' => 'Unauthorized field access.'], 403);
             }
 
-            $updated = $this->expenseService->updateExpense((int) $id, $validator->validated());
+            $updated = $this->expenseService->updateExpense((int) $id, $validated);
 
             if (! $updated) {
                 return response()->json(['success' => false, 'message' => 'Data pengeluaran tidak ditemukan.'], 404);
@@ -121,7 +113,7 @@ class ExpenseController extends Controller
 
             return response()->json(['success' => true, 'message' => 'Data pengeluaran berhasil diperbarui.'], 200);
         } catch (Throwable $e) {
-            return response()->json(['success' => false, 'message' => 'Gagal mengupdate data: '.$e->getMessage()], 500);
+            return $this->errorResponse($e, 'Gagal mengupdate data: ');
         }
     }
 
@@ -136,7 +128,23 @@ class ExpenseController extends Controller
 
             return response()->json(['success' => true, 'message' => 'Data pengeluaran berhasil dihapus.'], 200);
         } catch (Throwable $e) {
-            return response()->json(['success' => false, 'message' => 'Gagal menghapus data: '.$e->getMessage()], 500);
+            return $this->errorResponse($e, 'Gagal menghapus data: ');
         }
+    }
+
+    private function validatedExpenseData(Request $request): array|JsonResponse
+    {
+        $validator = Validator::make($request->all(), self::EXPENSE_VALIDATION_RULES);
+
+        if ($validator->fails()) {
+            return response()->json(['success' => false, 'message' => $validator->errors()->first()], 422);
+        }
+
+        return $validator->validated();
+    }
+
+    private function errorResponse(Throwable $exception, string $message): JsonResponse
+    {
+        return response()->json(['success' => false, 'message' => $message.$exception->getMessage()], 500);
     }
 }

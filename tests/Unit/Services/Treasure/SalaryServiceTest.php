@@ -11,6 +11,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\Traits\UsesInMemoryDatabase;
+use Tests\Traits\CreatesExpenseRecords;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
@@ -18,7 +19,7 @@ use Tests\TestCase;
 #[RunTestsInSeparateProcesses]
 class SalaryServiceTest extends TestCase
 {
-    use UsesInMemoryDatabase;
+    use UsesInMemoryDatabase, CreatesExpenseRecords;
 
     private const DATE_20260101 = '2026-01-01';
 
@@ -44,20 +45,7 @@ class SalaryServiceTest extends TestCase
             $table->string('status')->default('active');
             $table->timestamps();
         });
-        Schema::connection('mysql_joglo66_app')->create('expenses', function (Blueprint $table): void {
-            $table->id();
-            $table->unsignedBigInteger('fk_field_id');
-            $table->unsignedBigInteger('fk_user_id');
-            $table->string('name');
-            $table->string('category');
-            $table->unsignedInteger('quantity');
-            $table->unsignedInteger('unit_price');
-            $table->date('expense_date');
-            $table->string('proof_photo')->nullable();
-            $table->text('note')->nullable();
-            $table->date('generate_at');
-            $table->timestamps();
-        });
+        $this->createExpensesTable();
         Schema::connection('mysql_joglo66_app')->create('employee_salaries', function (Blueprint $table): void {
             $table->id();
             $table->unsignedBigInteger('fk_employee_id');
@@ -77,12 +65,9 @@ class SalaryServiceTest extends TestCase
     {
         $activeEmployee = $this->createEmployee('Active', 500000, GeneralStatus::ACTIVE->value);
         $this->createEmployee('Inactive', 300000, 'inactive');
-        Expense::create([
-            'fk_field_id' => 1,
-            'fk_user_id' => 1,
+        $this->createExpenseRecord([
             'name' => 'Salary',
             'category' => 'Gaji',
-            'quantity' => 1,
             'unit_price' => 600000,
             'expense_date' => '2026-10-01',
             'generate_at' => '2026-10-01',
@@ -111,15 +96,12 @@ class SalaryServiceTest extends TestCase
     public function test_update_or_calculate_salary(): void
     {
         $employee = $this->createEmployee('Employee', 500000, GeneralStatus::ACTIVE->value);
-        Expense::create([
-            'fk_field_id' => 1,
+        $this->createExpenseRecord([
             'fk_user_id' => 3,
             'name' => 'Salary',
             'category' => 'Gaji',
-            'quantity' => 1,
             'unit_price' => 400000,
             'expense_date' => self::DATE_20260101,
-            'generate_at' => self::DATE_20260101,
         ]);
         $expense = Expense::first();
         $salary = EmployeeSalary::create([

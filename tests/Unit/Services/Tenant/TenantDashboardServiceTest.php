@@ -31,41 +31,15 @@ class TenantDashboardServiceTest extends TestCase
 
         $this->setUpInMemoryDatabase();
 
-        Schema::connection('mysql_joglo66_app')->create('users', function (Blueprint $table): void {
-            $table->id();
-            $table->string('name');
-            $table->string('email')->nullable();
-            $table->string('password')->nullable();
-            $table->string('role')->nullable();
-            $table->timestamps();
-        });
+        $this->createUsersTable();
         Schema::connection('mysql_joglo66_app')->create('fields', function (Blueprint $table): void {
             $table->id();
             $table->string('name');
             $table->unsignedBigInteger('fk_user_id')->nullable();
             $table->timestamps();
         });
-        Schema::connection('mysql_joglo66_app')->create('bookings', function (Blueprint $table): void {
-            $table->id();
-            $table->unsignedBigInteger('fk_user_id');
-            $table->unsignedBigInteger('fk_field_id');
-            $table->string('team_name');
-            $table->string('customer_phone')->nullable();
-            $table->string('customer_email')->nullable();
-            $table->string('notes')->nullable();
-            $table->date('booking_date');
-            $table->timestamps();
-        });
-        Schema::connection('mysql_joglo66_app')->create('booking_details', function (Blueprint $table): void {
-            $table->id();
-            $table->unsignedBigInteger('fk_booking_id');
-            $table->date('play_date');
-            $table->time('start_play_time');
-            $table->time('end_play_time');
-            $table->decimal('price', 10, 2);
-            $table->string('status');
-            $table->timestamps();
-        });
+        $this->createBookingsTable();
+        $this->createBookingDetailsTable();
     }
 
     public function test_get_cached_fields(): void
@@ -85,24 +59,12 @@ class TenantDashboardServiceTest extends TestCase
 
     public function test_get_nearest_bookings(): void
     {
-        $user = User::create(['name' => 'Tenant', 'email' => 'tenant@example.com']);
-        $field = Field::create(['name' => self::MAIN_FIELD]);
-        $booking = Booking::create([
-            'fk_user_id' => $user->id,
-            'fk_field_id' => $field->id,
-            'team_name' => self::TEAM_NAME,
-            'booking_date' => '2026-10-01',
-        ]);
-        BookingDetail::create([
-            'fk_booking_id' => $booking->id,
-            'play_date' => '2026-10-26',
-            'start_play_time' => '14:00:00',
-            'end_play_time' => '15:00:00',
-            'price' => 100000,
-            'status' => 'active',
-        ]);
+        $detail = $this->createBookingDetail('2026-10-01', '2026-10-26', '14:00:00', '15:00:00');
 
-        $nearest = (new TenantDashboardService)->getNearestBookings($field->id, Carbon::parse(self::NOW_20261025_120000));
+        $nearest = (new TenantDashboardService)->getNearestBookings(
+            $detail->booking->fk_field_id,
+            Carbon::parse(self::NOW_20261025_120000)
+        );
 
         $this->assertCount(1, $nearest);
         $this->assertSame(self::TEAM_NAME, $nearest->first()['team_name']);
@@ -112,24 +74,12 @@ class TenantDashboardServiceTest extends TestCase
 
     public function test_get_user_bookings(): void
     {
-        $user = User::create(['name' => 'Tenant', 'email' => 'tenant@example.com']);
-        $field = Field::create(['name' => self::MAIN_FIELD]);
-        $booking = Booking::create([
-            'fk_user_id' => $user->id,
-            'fk_field_id' => $field->id,
-            'team_name' => self::TEAM_NAME,
-            'booking_date' => '2026-10-20',
-        ]);
-        BookingDetail::create([
-            'fk_booking_id' => $booking->id,
-            'play_date' => '2026-10-26',
-            'start_play_time' => '08:30:00',
-            'end_play_time' => '10:00:00',
-            'price' => 100000,
-            'status' => 'active',
-        ]);
+        $detail = $this->createBookingDetail('2026-10-20', '2026-10-26', '08:30:00', '10:00:00');
 
-        $bookings = (new TenantDashboardService)->getUserBookings($user->id, $field->id);
+        $bookings = (new TenantDashboardService)->getUserBookings(
+            $detail->booking->fk_user_id,
+            $detail->booking->fk_field_id
+        );
 
         $this->assertCount(1, $bookings);
         $this->assertSame(self::TEAM_NAME, $bookings->first()['team_name']);
@@ -161,5 +111,26 @@ class TenantDashboardServiceTest extends TestCase
         $this->assertSame('Mulai dalam 1 minggu 2 hari lagi', $method->invoke($service, 9));
         $this->assertSame('Mulai dalam 1 bulan++ lagi', $method->invoke($service, 30));
         $this->assertSame('Mulai dalam 1 tahun lagi', $method->invoke($service, 365));
+    }
+
+    private function createBookingDetail(string $bookingDate, string $playDate, string $startTime, string $endTime): BookingDetail
+    {
+        $user = User::create(['name' => 'Tenant', 'email' => 'tenant@example.com']);
+        $field = Field::create(['name' => self::MAIN_FIELD]);
+        $booking = Booking::create([
+            'fk_user_id' => $user->id,
+            'fk_field_id' => $field->id,
+            'team_name' => self::TEAM_NAME,
+            'booking_date' => $bookingDate,
+        ]);
+
+        return BookingDetail::create([
+            'fk_booking_id' => $booking->id,
+            'play_date' => $playDate,
+            'start_play_time' => $startTime,
+            'end_play_time' => $endTime,
+            'price' => 100000,
+            'status' => 'active',
+        ]);
     }
 }

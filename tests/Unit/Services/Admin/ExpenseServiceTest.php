@@ -3,19 +3,19 @@
 namespace Tests\Unit\Services\Admin;
 
 use App\Enums\UserRole;
-use App\Models\Expense;
 use App\Services\Admin\ExpenseService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\Traits\UsesInMemoryDatabase;
+use Tests\Traits\CreatesExpenseRecords;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Tests\TestCase;
 
 #[RunTestsInSeparateProcesses]
 class ExpenseServiceTest extends TestCase
 {
-    use UsesInMemoryDatabase;
+    use UsesInMemoryDatabase, CreatesExpenseRecords;
 
     private const DATE_20260101 = '2026-01-01';
 
@@ -24,21 +24,7 @@ class ExpenseServiceTest extends TestCase
         parent::setUp();
 
         $this->setUpInMemoryDatabase();
-
-        Schema::connection('mysql_joglo66_app')->create('expenses', function (Blueprint $table): void {
-            $table->id();
-            $table->unsignedBigInteger('fk_field_id');
-            $table->unsignedBigInteger('fk_user_id');
-            $table->string('name');
-            $table->string('category');
-            $table->unsignedInteger('quantity');
-            $table->unsignedInteger('unit_price');
-            $table->date('expense_date');
-            $table->string('proof_photo')->nullable();
-            $table->text('note')->nullable();
-            $table->date('generate_at');
-            $table->timestamps();
-        });
+        $this->createExpensesTable();
 
         Schema::connection('mysql_joglo66_app')->create('field_admins', function (Blueprint $table): void {
             $table->id();
@@ -49,19 +35,15 @@ class ExpenseServiceTest extends TestCase
 
     public function test_get_expenses(): void
     {
-        Expense::create([
-            'fk_field_id' => 1,
-            'fk_user_id' => 1,
+        $this->createExpenseRecord([
             'name' => 'Older',
             'category' => 'Maintenance',
             'quantity' => 2,
             'unit_price' => 100,
             'expense_date' => self::DATE_20260101,
-            'generate_at' => self::DATE_20260101,
         ]);
-        Expense::create([
+        $this->createExpenseRecord([
             'fk_field_id' => 2,
-            'fk_user_id' => 1,
             'name' => 'Latest',
             'category' => 'Utilities',
             'quantity' => 1,
@@ -81,15 +63,11 @@ class ExpenseServiceTest extends TestCase
     public function test_get_unique_categories(): void
     {
         foreach ([[1, 'Maintenance'], [1, 'Utilities'], [2, 'Cleaning']] as [$fieldId, $category]) {
-            Expense::create([
+            $this->createExpenseRecord([
                 'fk_field_id' => $fieldId,
-                'fk_user_id' => 1,
                 'name' => $category,
                 'category' => $category,
-                'quantity' => 1,
-                'unit_price' => 100,
                 'expense_date' => self::DATE_20260101,
-                'generate_at' => self::DATE_20260101,
             ]);
         }
 
@@ -123,15 +101,9 @@ class ExpenseServiceTest extends TestCase
 
     public function test_update_expense(): void
     {
-        $expense = Expense::create([
-            'fk_field_id' => 1,
-            'fk_user_id' => 1,
+        $expense = $this->createExpenseRecord([
             'name' => 'Old name',
             'category' => 'Maintenance',
-            'quantity' => 1,
-            'unit_price' => 100,
-            'expense_date' => self::DATE_20260101,
-            'generate_at' => self::DATE_20260101,
         ]);
 
         $updated = (new ExpenseService)->updateExpense($expense->id, [
@@ -151,21 +123,15 @@ class ExpenseServiceTest extends TestCase
 
     public function test_delete_expense(): void
     {
-        $expense = Expense::create([
-            'fk_field_id' => 1,
-            'fk_user_id' => 1,
+        $expense = $this->createExpenseRecord([
             'name' => 'Disposable',
-            'category' => 'Other',
-            'quantity' => 1,
             'unit_price' => 50,
-            'expense_date' => self::DATE_20260101,
-            'generate_at' => self::DATE_20260101,
         ]);
 
         $service = new ExpenseService;
 
         $this->assertTrue($service->deleteExpense($expense->id));
-        $this->assertNull(Expense::find($expense->id));
+        $this->assertNull($expense->fresh());
         $this->assertFalse($service->deleteExpense($expense->id));
     }
 }

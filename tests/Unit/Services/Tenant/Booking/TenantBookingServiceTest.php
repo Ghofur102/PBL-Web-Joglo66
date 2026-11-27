@@ -52,40 +52,9 @@ class TenantBookingServiceTest extends TestCase
             $table->unsignedInteger('price');
             $table->timestamps();
         });
-        Schema::connection('mysql_joglo66_app')->create('bookings', function (Blueprint $table): void {
-            $table->id();
-            $table->unsignedBigInteger('fk_user_id');
-            $table->unsignedBigInteger('fk_field_id');
-            $table->string('team_name');
-            $table->string('customer_phone')->nullable();
-            $table->string('customer_email')->nullable();
-            $table->string('notes')->nullable();
-            $table->date('booking_date');
-            $table->timestamps();
-        });
-        Schema::connection('mysql_joglo66_app')->create('booking_details', function (Blueprint $table): void {
-            $table->id();
-            $table->unsignedBigInteger('fk_booking_id');
-            $table->date('play_date');
-            $table->time('start_play_time');
-            $table->time('end_play_time');
-            $table->decimal('price', 10, 2);
-            $table->string('status');
-            $table->timestamps();
-        });
-        Schema::connection('mysql_joglo66_app')->create('payments', function (Blueprint $table): void {
-            $table->id();
-            $table->unsignedBigInteger('fk_booking_id');
-            $table->unsignedBigInteger('fk_booking_detail_id')->nullable();
-            $table->string('reference_id')->nullable();
-            $table->string('payment_url')->nullable();
-            $table->string('payment_type');
-            $table->string('method');
-            $table->unsignedInteger('amount');
-            $table->string('status');
-            $table->timestamp('paid_at')->nullable();
-            $table->timestamps();
-        });
+        $this->createBookingsTable();
+        $this->createBookingDetailsTable();
+        $this->createPaymentsTable(true);
         Schema::connection('mysql_joglo66_app')->create('field_closures', function (Blueprint $table): void {
             $table->id();
             $table->unsignedBigInteger('fk_field_id');
