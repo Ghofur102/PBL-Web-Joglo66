@@ -14,6 +14,9 @@ use Tests\TestCase;
 
 class AuthServiceTest extends TestCase
 {
+    private const EMAIL_TENANT = 'tenant@example.com';
+    private const EMAIL_WORKER = 'worker@example.com';
+
     protected AuthService $service;
 
     protected function setUp(): void
@@ -35,14 +38,14 @@ class AuthServiceTest extends TestCase
             $this->assertSame('Email atau password salah.', $e->getMessage());
         }
 
-        $tenant = User::factory()->create([
-            'email' => 'tenant@example.com',
+        User::factory()->create([
+            'email' => self::EMAIL_TENANT,
             'password' => Hash::make($password),
             'role' => UserRole::TENANT->value,
         ]);
 
         try {
-            $this->service->login(['email' => 'tenant@example.com', 'password' => 'wrongpassword']);
+            $this->service->login(['email' => self::EMAIL_TENANT, 'password' => 'wrongpassword']);
             $this->fail('Expected HttpException 401 for wrong password was not thrown');
         } catch (HttpException $e) {
             $this->assertSame(401, $e->getStatusCode());
@@ -50,7 +53,7 @@ class AuthServiceTest extends TestCase
 
         // 2. Denied role test (tenant cannot access management API)
         try {
-            $this->service->login(['email' => 'tenant@example.com', 'password' => $password]);
+            $this->service->login(['email' => self::EMAIL_TENANT, 'password' => $password]);
             $this->fail('Expected AccessDeniedHttpException for tenant role was not thrown');
         } catch (AccessDeniedHttpException $e) {
             $this->assertSame('Akses ditolak. Aplikasi ini khusus untuk Manajemen.', $e->getMessage());
@@ -58,13 +61,13 @@ class AuthServiceTest extends TestCase
 
         // 3. Worker without assigned field test
         $worker = User::factory()->create([
-            'email' => 'worker@example.com',
+            'email' => self::EMAIL_WORKER,
             'password' => Hash::make($password),
             'role' => UserRole::WORKER->value,
         ]);
 
         try {
-            $this->service->login(['email' => 'worker@example.com', 'password' => $password]);
+            $this->service->login(['email' => self::EMAIL_WORKER, 'password' => $password]);
             $this->fail('Expected AccessDeniedHttpException for unassigned worker was not thrown');
         } catch (AccessDeniedHttpException $e) {
             $this->assertStringContainsString('Anda belum ditugaskan untuk menjaga lapangan', $e->getMessage());
@@ -77,7 +80,7 @@ class AuthServiceTest extends TestCase
             'fk_user_id' => $worker->id,
         ]);
 
-        $result = $this->service->login(['email' => 'worker@example.com', 'password' => $password]);
+        $result = $this->service->login(['email' => self::EMAIL_WORKER, 'password' => $password]);
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('token', $result);

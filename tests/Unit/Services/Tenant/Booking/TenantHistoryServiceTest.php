@@ -7,20 +7,22 @@ use App\Enums\PaymentStatus;
 use App\Enums\PaymentType;
 use App\Enums\UserRole;
 use App\Models\Booking;
-use App\Models\BookingCancelled;
 use App\Models\BookingDetail;
 use App\Models\BookingReschedule;
 use App\Models\Field;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\Tenant\Booking\TenantHistoryService;
-use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
 use ReflectionMethod;
 use Tests\TestCase;
 
 class TenantHistoryServiceTest extends TestCase
 {
+    private const TEAM_ELANG = 'Elang FC';
+    private const TIME_10 = '10:00:00';
+    private const TIME_11 = '11:00:00';
+
     protected TenantHistoryService $service;
 
     protected function setUp(): void
@@ -96,7 +98,7 @@ class TenantHistoryServiceTest extends TestCase
         $booking2 = Booking::create([
             'fk_user_id' => $tenant->id,
             'fk_field_id' => $field->id,
-            'team_name' => 'Elang FC',
+            'team_name' => self::TEAM_ELANG,
             'booking_date' => '2026-11-05',
         ]);
         Payment::create([
@@ -117,12 +119,12 @@ class TenantHistoryServiceTest extends TestCase
         // 2. Filter by date
         $dateResult = $this->service->getPaginatedHistory($tenant->id, ['date' => '2026-11-05']);
         $this->assertSame(1, $dateResult->total());
-        $this->assertSame('Elang FC', $dateResult->first()->team_name);
+        $this->assertSame(self::TEAM_ELANG, $dateResult->first()->team_name);
 
         // 3. Filter by status
         $statusResult = $this->service->getPaginatedHistory($tenant->id, ['status' => PaymentStatus::PENDING->value]);
         $this->assertSame(1, $statusResult->total());
-        $this->assertSame('Elang FC', $statusResult->first()->team_name);
+        $this->assertSame(self::TEAM_ELANG, $statusResult->first()->team_name);
     }
 
     public function test_get_booking_detail(): void
@@ -137,11 +139,11 @@ class TenantHistoryServiceTest extends TestCase
             'booking_date' => now()->toDateString(),
         ]);
 
-        $detail = BookingDetail::create([
+        BookingDetail::create([
             'fk_booking_id' => $booking->id,
             'play_date' => now()->addDays(5)->toDateString(),
-            'start_play_time' => '10:00:00',
-            'end_play_time' => '11:00:00',
+            'start_play_time' => self::TIME_10,
+            'end_play_time' => self::TIME_11,
             'price' => 150000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
@@ -184,15 +186,15 @@ class TenantHistoryServiceTest extends TestCase
         BookingDetail::create([
             'fk_booking_id' => $booking->id,
             'play_date' => now()->toDateString(),
-            'start_play_time' => '10:00:00',
-            'end_play_time' => '11:00:00',
+            'start_play_time' => self::TIME_10,
+            'end_play_time' => self::TIME_11,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
         BookingDetail::create([
             'fk_booking_id' => $booking->id,
             'play_date' => now()->toDateString(),
-            'start_play_time' => '11:00:00',
+            'start_play_time' => self::TIME_11,
             'end_play_time' => '12:00:00',
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
@@ -237,8 +239,8 @@ class TenantHistoryServiceTest extends TestCase
         $detail = BookingDetail::create([
             'fk_booking_id' => $booking->id,
             'play_date' => now()->addDays(5)->toDateString(),
-            'start_play_time' => '10:00:00',
-            'end_play_time' => '11:00:00',
+            'start_play_time' => self::TIME_10,
+            'end_play_time' => self::TIME_11,
             'price' => 120000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);

@@ -19,6 +19,8 @@ use UnexpectedValueException;
 
 class TenantDuitkuServiceTest extends TestCase
 {
+    private const VALID_LEGACY_MD5_SIGNATURE = '1a376ba4c4601e991d3789b0364cbe74';
+
     protected TenantDuitkuService $service;
 
     protected function setUp(): void
@@ -67,7 +69,7 @@ class TenantDuitkuServiceTest extends TestCase
         ]);
 
         $signatureStr = 'TEST_MERCHANT_CODE' . $amount . $orderId . 'TEST_API_KEY';
-        $signature = md5($signatureStr);
+        $signature = hash('sha256', $signatureStr);
 
         $payload = [
             'merchantCode' => 'TEST_MERCHANT_CODE',
@@ -118,7 +120,7 @@ class TenantDuitkuServiceTest extends TestCase
         $validMd5Payload = [
             'amount' => $amount,
             'merchantOrderId' => $orderId,
-            'signature' => md5($payloadStr),
+            'signature' => self::VALID_LEGACY_MD5_SIGNATURE,
             'reference' => 'REF-001',
         ];
         $method->invoke($this->service, $validMd5Payload, $merchantCode, $apiKey);

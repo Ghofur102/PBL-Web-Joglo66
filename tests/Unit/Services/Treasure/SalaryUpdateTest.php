@@ -1,5 +1,4 @@
 <?php
-
 namespace Tests\Unit\Services\Treasure;
 
 use App\Enums\GeneralStatus;
@@ -13,13 +12,11 @@ use Illuminate\Foundation\Testing\Concerns\InteractsWithDatabase;
 use Illuminate\Foundation\Testing\Concerns\MakesHttpRequests;
 use Tests\TestCase;
 
-/**
- * @mixin \Illuminate\Foundation\Testing\TestCase
- * @mixin MakesHttpRequests
- * @mixin InteractsWithDatabase
- */
 class SalaryUpdateTest extends TestCase
 {
+    private const ENDPOINT_SALARY_UPDATE = '/api/treasurer/gaji/update';
+    private const DATE_JAN_01 = '2026-01-01';
+
     use InteractsWithDatabase;
     use MakesHttpRequests;
 
@@ -50,7 +47,7 @@ class SalaryUpdateTest extends TestCase
             'name' => 'Budi Santoso',
             'position' => 'Staff Operasional',
             'base_salary' => 2000000,
-            'join_date' => '2026-01-01',
+            'join_date' => self::DATE_JAN_01,
             'status' => GeneralStatus::ACTIVE->value,
         ]);
 
@@ -62,8 +59,8 @@ class SalaryUpdateTest extends TestCase
             'category' => 'Gaji',
             'quantity' => 1,
             'unit_price' => 2000000,
-            'expense_date' => '2026-01-01',
-            'generate_at' => '2026-01-01',
+            'expense_date' => self::DATE_JAN_01,
+            'generate_at' => self::DATE_JAN_01,
         ]);
 
         // 5. Siapkan data gaji awal karyawan (periode Januari 2026: Rp 2.000.000)
@@ -90,14 +87,14 @@ class SalaryUpdateTest extends TestCase
             'employee_id' => $this->employee->id,
             'bulan' => 1, // Januari
             'tahun' => 2026,
-            'amount_paid' => 0, // Valid (>= 0)
+            'amount_paid' => 2500000, // Valid (>= 0)
             'bonus' => 100000,
             'deduction' => 0,
             'notes' => 'Bonus performa lembur',
         ];
 
         $response = $this->actingAs($this->treasurer, 'sanctum')
-            ->postJson('/api/treasurer/gaji/update', $payload);
+            ->postJson(self::ENDPOINT_SALARY_UPDATE, $payload);
 
         // Assert HTTP 200 OK & response JSON sesuai spesifikasi
         $response->assertStatus(200)
@@ -111,7 +108,7 @@ class SalaryUpdateTest extends TestCase
             'fk_employee_id' => $this->employee->id,
             'period_month' => 'january',
             'period_year' => 2026,
-            'amount_paid' => 0,
+            'amount_paid' => 2500000,
             'bonus' => 100000,
             'notes' => 'Bonus performa lembur',
         ]);
@@ -134,7 +131,7 @@ class SalaryUpdateTest extends TestCase
         ];
 
         $response = $this->actingAs($this->treasurer, 'sanctum')
-            ->postJson('/api/treasurer/gaji/update', $payload);
+            ->postJson(self::ENDPOINT_SALARY_UPDATE, $payload);
 
         // Assert HTTP 422 Unprocessable Entity karena gagal validasi 'amount_paid' => min:0
         $response->assertStatus(422)
@@ -174,7 +171,7 @@ class SalaryUpdateTest extends TestCase
         ];
 
         $response = $this->actingAs($nonTreasurer, 'sanctum')
-            ->postJson('/api/treasurer/gaji/update', $payload);
+            ->postJson(self::ENDPOINT_SALARY_UPDATE, $payload);
 
         // Assert HTTP 403 Forbidden dengan pesan 'Akses ditolak.'
         $response->assertStatus(403)

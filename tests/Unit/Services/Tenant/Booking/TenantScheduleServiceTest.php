@@ -2,16 +2,13 @@
 
 namespace Tests\Unit\Services\Tenant\Booking;
 
-use App\Enums\BookingDetailStatus;
 use App\Enums\UserRole;
 use App\Models\Booking;
 use App\Models\BookingDetail;
 use App\Models\Field;
-use App\Models\FieldClosure;
 use App\Models\FieldPrice;
 use App\Models\User;
 use App\Services\Tenant\Booking\TenantScheduleService;
-use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use ReflectionMethod;
@@ -19,6 +16,8 @@ use Tests\TestCase;
 
 class TenantScheduleServiceTest extends TestCase
 {
+    private const TEST_MONDAY_DATE = '2026-11-02';
+
     protected TenantScheduleService $service;
 
     protected function setUp(): void
@@ -31,7 +30,7 @@ class TenantScheduleServiceTest extends TestCase
     public function test_get_available_hourly_slots(): void
     {
         $field = Field::factory()->create();
-        $date = '2026-11-02'; // Monday
+        $date = self::TEST_MONDAY_DATE; // Monday
         $dayName = 'monday';
 
         // Set field price covering 06:00 to 23:00
@@ -72,7 +71,7 @@ class TenantScheduleServiceTest extends TestCase
 
         // 1. Available (kosong) slot
         $bookedSlotsEmpty = collect();
-        $slotKosong = $method->invoke($this->service, 10, '2026-11-02', $fieldPrices, $bookedSlotsEmpty, []);
+        $slotKosong = $method->invoke($this->service, 10, self::TEST_MONDAY_DATE, $fieldPrices, $bookedSlotsEmpty, []);
         $this->assertNotNull($slotKosong);
         $this->assertSame('10:00', $slotKosong['jam']);
         $this->assertSame('11:00', $slotKosong['jam_akhir']);
@@ -84,7 +83,7 @@ class TenantScheduleServiceTest extends TestCase
             'start_play_time' => '10:00:00',
             'end_play_time' => '11:00:00',
         ]);
-        $slotTerisi = $method->invoke($this->service, 10, '2026-11-02', $fieldPrices, collect([$bookedDetail]), []);
+        $slotTerisi = $method->invoke($this->service, 10, self::TEST_MONDAY_DATE, $fieldPrices, collect([$bookedDetail]), []);
         $this->assertSame('terisi', $slotTerisi['status']);
 
         // 3. Closed (tutup) slot
@@ -92,11 +91,11 @@ class TenantScheduleServiceTest extends TestCase
             'field_closure_start_time' => '2026-11-02 09:30:00',
             'field_closure_end_time' => '2026-11-02 11:30:00',
         ];
-        $slotTutup = $method->invoke($this->service, 10, '2026-11-02', $fieldPrices, $bookedSlotsEmpty, [$closure]);
+        $slotTutup = $method->invoke($this->service, 10, self::TEST_MONDAY_DATE, $fieldPrices, $bookedSlotsEmpty, [$closure]);
         $this->assertSame('tutup', $slotTutup['status']);
 
         // 4. No matching price rule returns null
-        $noPriceSlot = $method->invoke($this->service, 5, '2026-11-02', collect(), $bookedSlotsEmpty, []);
+        $noPriceSlot = $method->invoke($this->service, 5, self::TEST_MONDAY_DATE, collect(), $bookedSlotsEmpty, []);
         $this->assertNull($noPriceSlot);
     }
 
@@ -107,7 +106,7 @@ class TenantScheduleServiceTest extends TestCase
 
         $user = User::factory()->create(['role' => UserRole::WORKER->value]);
         $field = Field::factory()->create();
-        $date = '2026-11-02';
+        $date = self::TEST_MONDAY_DATE;
 
         DB::connection('mysql_joglo66_app')->table('field_closures')->insert([
             'fk_user_id' => $user->id,

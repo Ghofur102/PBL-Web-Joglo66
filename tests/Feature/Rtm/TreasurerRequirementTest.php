@@ -27,6 +27,13 @@ use Tests\TestCase;
  */
 class TreasurerRequirementTest extends TestCase
 {
+    private const ENDPOINT_LOGIN = '/api/login';
+    private const ENDPOINT_SALARY_UPDATE = '/api/treasurer/gaji/update';
+    private const ENDPOINT_SALARY_SYNC = '/api/treasurer/gaji/sync';
+    private const TREASURER_EMAIL = 'bendahara@joglo66.test';
+    private const DATE_JAN_01 = '2026-01-01';
+    private const JSON_GROSS_INCOME = 'data.gross_income';
+
     protected User $treasurer;
     protected User $owner;
     protected Field $assignedField;
@@ -42,7 +49,7 @@ class TreasurerRequirementTest extends TestCase
         ]);
 
         $this->treasurer = User::factory()->create([
-            'email' => 'bendahara@joglo66.test',
+            'email' => self::TREASURER_EMAIL,
             'password' => Hash::make('password123'),
             'role' => UserRole::TREASURER->value,
         ]);
@@ -66,7 +73,7 @@ class TreasurerRequirementTest extends TestCase
             'name' => 'Budi Santoso',
             'position' => 'Staff Operasional',
             'base_salary' => 2000000,
-            'join_date' => '2026-01-01',
+            'join_date' => self::DATE_JAN_01,
             'status' => GeneralStatus::ACTIVE->value,
         ]);
     }
@@ -88,8 +95,8 @@ class TreasurerRequirementTest extends TestCase
             'category' => 'Gaji',
             'quantity' => 1,
             'unit_price' => 2000000,
-            'expense_date' => '2026-01-01',
-            'generate_at' => '2026-01-01',
+            'expense_date' => self::DATE_JAN_01,
+            'generate_at' => self::DATE_JAN_01,
         ]);
 
         EmployeeSalary::create([
@@ -105,7 +112,7 @@ class TreasurerRequirementTest extends TestCase
         ]);
 
         $response = $this->actingAs($this->treasurer, 'sanctum')
-            ->postJson('/api/treasurer/gaji/update', [
+            ->postJson(self::ENDPOINT_SALARY_UPDATE, [
                 'employee_id' => $this->employee->id,
                 'bulan' => 1,
                 'tahun' => 2026,
@@ -137,7 +144,7 @@ class TreasurerRequirementTest extends TestCase
     public function test_tc_trs_01_2_gagal_memperbarui_nominal_gaji_saat_nominal_negatif(): void
     {
         $response = $this->actingAs($this->treasurer, 'sanctum')
-            ->postJson('/api/treasurer/gaji/update', [
+            ->postJson(self::ENDPOINT_SALARY_UPDATE, [
                 'employee_id' => $this->employee->id,
                 'bulan' => 1,
                 'tahun' => 2026,
@@ -166,7 +173,7 @@ class TreasurerRequirementTest extends TestCase
         ]);
 
         $response = $this->actingAs($nonTreasurer, 'sanctum')
-            ->postJson('/api/treasurer/gaji/update', [
+            ->postJson(self::ENDPOINT_SALARY_UPDATE, [
                 'employee_id' => $this->employee->id,
                 'bulan' => 1,
                 'tahun' => 2026,
@@ -193,8 +200,8 @@ class TreasurerRequirementTest extends TestCase
             'category' => 'Gaji',
             'quantity' => 1,
             'unit_price' => 2000000,
-            'expense_date' => '2026-01-01',
-            'generate_at' => '2026-01-01',
+            'expense_date' => self::DATE_JAN_01,
+            'generate_at' => self::DATE_JAN_01,
         ]);
 
         EmployeeSalary::create([
@@ -234,7 +241,7 @@ class TreasurerRequirementTest extends TestCase
         $currentYear = (int) date('Y');
 
         $response = $this->actingAs($this->treasurer, 'sanctum')
-            ->postJson('/api/treasurer/gaji/sync', [
+            ->postJson(self::ENDPOINT_SALARY_SYNC, [
                 'bulan' => $currentMonth,
                 'tahun' => $currentYear,
             ]);
@@ -269,7 +276,7 @@ class TreasurerRequirementTest extends TestCase
         $this->app->instance(SalaryService::class, $mockService);
 
         $response = $this->actingAs($this->treasurer, 'sanctum')
-            ->postJson('/api/treasurer/gaji/sync', [
+            ->postJson(self::ENDPOINT_SALARY_SYNC, [
                 'bulan' => (int) date('n'),
                 'tahun' => (int) date('Y'),
             ]);
@@ -296,7 +303,7 @@ class TreasurerRequirementTest extends TestCase
 
         // Menghapus semua field yang terikat ke user atau mencoba menyinkronkan ke field yang bukan haknya
         $response = $this->actingAs($treasurerWithoutTargetField, 'sanctum')
-            ->postJson('/api/treasurer/gaji/sync', [
+            ->postJson(self::ENDPOINT_SALARY_SYNC, [
                 'bulan' => (int) date('n'),
                 'tahun' => (int) date('Y'),
                 'field_id' => $this->unassignedField->id,
@@ -378,7 +385,7 @@ class TreasurerRequirementTest extends TestCase
             ]);
 
         // Seharusnya hanya total lapangan penugasan Bendahara (150.000), bukan gabungan (650.000)
-        $this->assertSame(150000, $response->json('data.gross_income'));
+        $this->assertSame(150000, $response->json(self::JSON_GROSS_INCOME));
     }
 
     /**
@@ -424,12 +431,12 @@ class TreasurerRequirementTest extends TestCase
         $resJan = $this->actingAs($this->treasurer, 'sanctum')
             ->getJson("/api/laporan-bulanan?month=1&year=2026&field_ids={$this->assignedField->id}");
         $resJan->assertStatus(200);
-        $this->assertSame(120000, $resJan->json('data.gross_income'));
+        $this->assertSame(120000, $resJan->json(self::JSON_GROSS_INCOME));
 
         $resFeb = $this->actingAs($this->treasurer, 'sanctum')
             ->getJson("/api/laporan-bulanan?month=2&year=2026&field_ids={$this->assignedField->id}");
         $resFeb->assertStatus(200);
-        $this->assertSame(240000, $resFeb->json('data.gross_income'));
+        $this->assertSame(240000, $resFeb->json(self::JSON_GROSS_INCOME));
     }
 
     /**
@@ -465,8 +472,8 @@ class TreasurerRequirementTest extends TestCase
      */
     public function test_tc_trs_04_1_login_berhasil_mengidentifikasi_peran_bendahara(): void
     {
-        $response = $this->postJson('/api/login', [
-            'email' => 'bendahara@joglo66.test',
+        $response = $this->postJson(self::ENDPOINT_LOGIN, [
+            'email' => self::TREASURER_EMAIL,
             'password' => 'password123',
         ]);
 
@@ -475,7 +482,7 @@ class TreasurerRequirementTest extends TestCase
                 'success' => true,
                 'message' => 'Login berhasil',
                 'user' => [
-                    'email' => 'bendahara@joglo66.test',
+                    'email' => self::TREASURER_EMAIL,
                     'role' => UserRole::TREASURER->value,
                 ],
             ])
@@ -488,8 +495,8 @@ class TreasurerRequirementTest extends TestCase
      */
     public function test_tc_trs_04_2_gagal_login_saat_email_atau_password_salah(): void
     {
-        $response = $this->postJson('/api/login', [
-            'email' => 'bendahara@joglo66.test',
+        $response = $this->postJson(self::ENDPOINT_LOGIN, [
+            'email' => self::TREASURER_EMAIL,
             'password' => 'salah-password',
         ]);
 
@@ -512,7 +519,7 @@ class TreasurerRequirementTest extends TestCase
             'role' => UserRole::TENANT->value,
         ]);
 
-        $response = $this->postJson('/api/login', [
+        $response = $this->postJson(self::ENDPOINT_LOGIN, [
             'email' => 'tenant@joglo66.test',
             'password' => 'password123',
         ]);
@@ -546,7 +553,7 @@ class TreasurerRequirementTest extends TestCase
      */
     public function test_tc_trs_05_1_blokir_akses_saat_kredensial_tidak_ditemukan(): void
     {
-        $response = $this->postJson('/api/login', [
+        $response = $this->postJson(self::ENDPOINT_LOGIN, [
             'email' => 'tidak.terdaftar@joglo66.test',
             'password' => 'password123',
         ]);
@@ -571,7 +578,7 @@ class TreasurerRequirementTest extends TestCase
         ]);
 
         // 1. Blokir login mobile untuk Tenant
-        $loginResponse = $this->postJson('/api/login', [
+        $loginResponse = $this->postJson(self::ENDPOINT_LOGIN, [
             'email' => 'penyewa.mobile@joglo66.test',
             'password' => 'password123',
         ]);

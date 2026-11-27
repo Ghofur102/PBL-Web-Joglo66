@@ -9,17 +9,23 @@ use App\Models\Booking;
 use App\Models\BookingDetail;
 use App\Models\BookingReschedule;
 use App\Models\Field;
-use App\Models\Payment;
 use App\Models\User;
 use App\Notifications\GeneralBookingNotification;
 use App\Services\Admin\RescheduleService;
 use DomainException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class RescheduleServiceTest extends TestCase
 {
+    private const DATE_NOV_01 = '2026-11-01';
+    private const DATE_NOV_05 = '2026-11-05';
+    private const DATE_NOV_10 = '2026-11-10';
+    private const TIME_10 = '10:00:00';
+    private const TIME_11 = '11:00:00';
+    private const TIME_16 = '16:00:00';
+    private const TIME_17 = '17:00:00';
+
     protected RescheduleService $service;
 
     protected function setUp(): void
@@ -47,16 +53,16 @@ class RescheduleServiceTest extends TestCase
 
         $detail = BookingDetail::create([
             'fk_booking_id' => $booking->id,
-            'play_date' => '2026-11-01',
-            'start_play_time' => '10:00:00',
-            'end_play_time' => '11:00:00',
+            'play_date' => self::DATE_NOV_01,
+            'start_play_time' => self::TIME_10,
+            'end_play_time' => self::TIME_11,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
 
         $data = [
             'new_price' => 150000,
-            'new_play_date' => '2026-11-05',
+            'new_play_date' => self::DATE_NOV_05,
             'new_start_time' => '14:00:00',
             'new_end_time' => '15:00:00',
             'reason' => 'Perubahan jam bermain oleh admin',
@@ -69,8 +75,8 @@ class RescheduleServiceTest extends TestCase
         // Assert reschedule created with deposit required
         $this->assertDatabaseHas('booking_reschedules', [
             'fk_booking_detail_id' => $detail->id,
-            'old_date' => '2026-11-01',
-            'new_play_date' => '2026-11-05',
+            'old_date' => self::DATE_NOV_01,
+            'new_play_date' => self::DATE_NOV_05,
             'new_price' => 150000,
             'status_refund' => 'deposit required',
             'approval_status' => 'approved',
@@ -79,7 +85,7 @@ class RescheduleServiceTest extends TestCase
 
         // Assert detail updated
         $detail->refresh();
-        $this->assertSame('2026-11-05', $detail->play_date);
+        $this->assertSame(self::DATE_NOV_05, $detail->play_date);
         $this->assertSame('14:00:00', $detail->start_play_time);
         $this->assertSame('15:00:00', $detail->end_play_time);
         $this->assertEquals(150000, $detail->price);
@@ -119,9 +125,9 @@ class RescheduleServiceTest extends TestCase
 
         $detail = BookingDetail::create([
             'fk_booking_id' => $booking->id,
-            'play_date' => '2026-11-01',
-            'start_play_time' => '10:00:00',
-            'end_play_time' => '11:00:00',
+            'play_date' => self::DATE_NOV_01,
+            'start_play_time' => self::TIME_10,
+            'end_play_time' => self::TIME_11,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
@@ -137,9 +143,9 @@ class RescheduleServiceTest extends TestCase
         $reschedule = BookingReschedule::create([
             'fk_booking_detail_id' => $detail->id,
             'old_date' => $detail->play_date,
-            'new_play_date' => '2026-11-10',
-            'new_start_play_time' => '16:00:00',
-            'new_end_play_time' => '17:00:00',
+            'new_play_date' => self::DATE_NOV_10,
+            'new_start_play_time' => self::TIME_16,
+            'new_end_play_time' => self::TIME_17,
             'new_price' => 120000,
             'reason' => 'Ingin ganti jam',
             'status_refund' => 'none',
@@ -156,9 +162,9 @@ class RescheduleServiceTest extends TestCase
         ]);
         $conflictDetail = BookingDetail::create([
             'fk_booking_id' => $otherBooking->id,
-            'play_date' => '2026-11-10',
-            'start_play_time' => '16:00:00',
-            'end_play_time' => '17:00:00',
+            'play_date' => self::DATE_NOV_10,
+            'start_play_time' => self::TIME_16,
+            'end_play_time' => self::TIME_17,
             'price' => 120000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
@@ -179,9 +185,9 @@ class RescheduleServiceTest extends TestCase
         $this->assertSame('approved', $reschedule->approval_status);
 
         $detail->refresh();
-        $this->assertSame('2026-11-10', $detail->play_date);
-        $this->assertSame('16:00:00', $detail->start_play_time);
-        $this->assertSame('17:00:00', $detail->end_play_time);
+        $this->assertSame(self::DATE_NOV_10, $detail->play_date);
+        $this->assertSame(self::TIME_16, $detail->start_play_time);
+        $this->assertSame(self::TIME_17, $detail->end_play_time);
         $this->assertEquals(120000, $detail->price);
         $this->assertSame(BookingDetailStatus::RESCHEDULE->value, $detail->status);
 
@@ -209,9 +215,9 @@ class RescheduleServiceTest extends TestCase
 
         $detail = BookingDetail::create([
             'fk_booking_id' => $booking->id,
-            'play_date' => '2026-11-01',
-            'start_play_time' => '10:00:00',
-            'end_play_time' => '11:00:00',
+            'play_date' => self::DATE_NOV_01,
+            'start_play_time' => self::TIME_10,
+            'end_play_time' => self::TIME_11,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);

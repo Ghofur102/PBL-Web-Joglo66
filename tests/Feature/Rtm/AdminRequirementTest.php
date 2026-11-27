@@ -28,6 +28,25 @@ use Tests\TestCase;
  */
 class AdminRequirementTest extends TestCase
 {
+    private const ENDPOINT_DASHBOARD = '/api/admin/dashboard';
+    private const ENDPOINT_CREATE_BOOKING = '/api/admin/create-booking';
+    private const ENDPOINT_PAYMENT_BOOKING = '/api/admin/payment-booking';
+    private const ENDPOINT_CLOSE_FIELD = '/api/admin/close-field';
+    private const ENDPOINT_CREATE_ATTRIBUTE = '/api/admin/create-attribute';
+    private const ENDPOINT_CHECK_AVAILABILITY_PREFIX = '/api/admin/check-slot-availability/';
+    private const ENDPOINT_DETAIL_BOOKING_PREFIX = '/api/admin/detail-booking/';
+    private const JSON_FIRST_SLOT_AVAILABLE = 'available_slots.available_slots.0.is_available';
+    private const JSON_FIRST_SESSION_REMAINING = 'data.sessions.0.remaining_payment';
+    private const TIME_08 = '08:00:00';
+    private const TIME_09 = '09:00:00';
+    private const TIME_10 = '10:00:00';
+    private const TIME_11 = '11:00:00';
+    private const TIME_12 = '12:00:00';
+    private const TIME_16 = '16:00:00';
+    private const TIME_17 = '17:00:00';
+    private const TIME_20 = '20:00:00';
+    private const TIME_21 = '21:00:00';
+
     protected User $owner;
     protected User $admin;
     protected User $tenant;
@@ -89,8 +108,8 @@ class AdminRequirementTest extends TestCase
         BookingDetail::create([
             'fk_booking_id' => $bookingAssigned->id,
             'play_date' => $today,
-            'start_play_time' => '10:00:00',
-            'end_play_time' => '11:00:00',
+            'start_play_time' => self::TIME_10,
+            'end_play_time' => self::TIME_11,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
@@ -113,7 +132,7 @@ class AdminRequirementTest extends TestCase
         BookingDetail::create([
             'fk_booking_id' => $bookingUnassigned->id,
             'play_date' => $today,
-            'start_play_time' => '12:00:00',
+            'start_play_time' => self::TIME_12,
             'end_play_time' => '13:00:00',
             'price' => 250000,
             'status' => BookingDetailStatus::ACTIVE->value,
@@ -129,7 +148,7 @@ class AdminRequirementTest extends TestCase
         ]);
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->getJson('/api/admin/dashboard');
+            ->getJson(self::ENDPOINT_DASHBOARD);
 
         $response->assertStatus(200)
             ->assertJson([
@@ -166,7 +185,7 @@ class AdminRequirementTest extends TestCase
         ]);
 
         // Awalnya hanya terikat ke assignedField (income 0)
-        $resBefore = $this->actingAs($this->admin, 'sanctum')->getJson('/api/admin/dashboard');
+        $resBefore = $this->actingAs($this->admin, 'sanctum')->getJson(self::ENDPOINT_DASHBOARD);
         $resBefore->assertStatus(200);
         $this->assertSame(0, $resBefore->json('data.today_income'));
 
@@ -176,7 +195,7 @@ class AdminRequirementTest extends TestCase
             'fk_user_id' => $this->admin->id,
         ]);
 
-        $resAfter = $this->actingAs($this->admin, 'sanctum')->getJson('/api/admin/dashboard');
+        $resAfter = $this->actingAs($this->admin, 'sanctum')->getJson(self::ENDPOINT_DASHBOARD);
         $resAfter->assertStatus(200);
         $this->assertSame(200000, $resAfter->json('data.today_income'));
     }
@@ -195,7 +214,7 @@ class AdminRequirementTest extends TestCase
         $this->app->instance(DashboardService::class, $mockDashboard);
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->getJson('/api/admin/dashboard');
+            ->getJson(self::ENDPOINT_DASHBOARD);
 
         $response->assertStatus(200)
             ->assertJson([
@@ -219,8 +238,8 @@ class AdminRequirementTest extends TestCase
         FieldPrice::create([
             'fk_field_id' => $this->assignedField->id,
             'day_type' => $dayName,
-            'start_time' => '08:00:00',
-            'end_time' => '11:00:00',
+            'start_time' => self::TIME_08,
+            'end_time' => self::TIME_11,
             'price' => 100000,
         ]);
 
@@ -234,14 +253,14 @@ class AdminRequirementTest extends TestCase
         BookingDetail::create([
             'fk_booking_id' => $booking->id,
             'play_date' => $targetDate,
-            'start_play_time' => '09:00:00',
-            'end_play_time' => '10:00:00',
+            'start_play_time' => self::TIME_09,
+            'end_play_time' => self::TIME_10,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->getJson("/api/admin/check-slot-availability/{$this->assignedField->id}/{$targetDate}");
+            ->getJson(self::ENDPOINT_CHECK_AVAILABILITY_PREFIX . $this->assignedField->id . '/' . $targetDate);
 
         $response->assertStatus(200)
             ->assertJson(['success' => true]);
@@ -266,8 +285,8 @@ class AdminRequirementTest extends TestCase
             FieldPrice::create([
                 'fk_field_id' => $this->assignedField->id,
                 'day_type' => strtolower(Carbon::parse($d)->englishDayOfWeek),
-                'start_time' => '08:00:00',
-                'end_time' => '10:00:00',
+                'start_time' => self::TIME_08,
+                'end_time' => self::TIME_10,
                 'price' => 100000,
             ]);
         }
@@ -281,8 +300,8 @@ class AdminRequirementTest extends TestCase
         BookingDetail::create([
             'fk_booking_id' => $booking->id,
             'play_date' => $date1,
-            'start_play_time' => '08:00:00',
-            'end_play_time' => '09:00:00',
+            'start_play_time' => self::TIME_08,
+            'end_play_time' => self::TIME_09,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
@@ -290,12 +309,12 @@ class AdminRequirementTest extends TestCase
         $resDate1 = $this->actingAs($this->admin, 'sanctum')
             ->getJson("/api/admin/check-slot-availability/{$this->assignedField->id}/{$date1}");
         $resDate1->assertStatus(200);
-        $this->assertFalse($resDate1->json('available_slots.available_slots.0.is_available'));
+        $this->assertFalse($resDate1->json(self::JSON_FIRST_SLOT_AVAILABLE));
 
         $resDate2 = $this->actingAs($this->admin, 'sanctum')
             ->getJson("/api/admin/check-slot-availability/{$this->assignedField->id}/{$date2}");
         $resDate2->assertStatus(200);
-        $this->assertTrue($resDate2->json('available_slots.available_slots.0.is_available'));
+        $this->assertTrue($resDate2->json(self::JSON_FIRST_SLOT_AVAILABLE));
     }
 
     /**
@@ -332,7 +351,7 @@ class AdminRequirementTest extends TestCase
         $this->app->instance(FieldService::class, $mockFieldService);
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->getJson("/api/admin/check-slot-availability/{$this->assignedField->id}/{$targetDate}");
+            ->getJson(self::ENDPOINT_CHECK_AVAILABILITY_PREFIX . $this->assignedField->id . '/' . $targetDate);
 
         $response->assertStatus(500)
             ->assertJson([
@@ -355,13 +374,13 @@ class AdminRequirementTest extends TestCase
         FieldPrice::create([
             'fk_field_id' => $this->assignedField->id,
             'day_type' => strtolower(Carbon::parse($playDate)->englishDayOfWeek),
-            'start_time' => '08:00:00',
+            'start_time' => self::TIME_08,
             'end_time' => '18:00:00',
             'price' => 100000,
         ]);
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/create-booking', [
+            ->postJson(self::ENDPOINT_CREATE_BOOKING, [
                 'user_id' => $this->admin->id,
                 'field_id' => $this->assignedField->id,
                 'team_name' => 'Garuda Offline FC',
@@ -407,7 +426,7 @@ class AdminRequirementTest extends TestCase
         $playDate = Carbon::tomorrow()->toDateString();
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/create-booking', [
+            ->postJson(self::ENDPOINT_CREATE_BOOKING, [
                 'user_id' => $this->admin->id,
                 'field_id' => $this->assignedField->id,
                 'team_name' => '',
@@ -450,13 +469,13 @@ class AdminRequirementTest extends TestCase
             'fk_booking_id' => $booking->id,
             'play_date' => $playDate,
             'start_play_time' => '15:00:00',
-            'end_play_time' => '16:00:00',
+            'end_play_time' => self::TIME_16,
             'price' => 100000,
             'status' => BookingDetailStatus::WAITING->value,
         ]);
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/payment-booking', [
+            ->postJson(self::ENDPOINT_PAYMENT_BOOKING, [
                 'booking_id' => $booking->id,
                 'booking_detail_id' => $detail->id,
                 'payment_type' => PaymentType::DOWN_PAYMENT->value,
@@ -501,7 +520,7 @@ class AdminRequirementTest extends TestCase
             'fk_booking_id' => $booking->id,
             'play_date' => Carbon::tomorrow()->toDateString(),
             'start_play_time' => '15:00:00',
-            'end_play_time' => '16:00:00',
+            'end_play_time' => self::TIME_16,
             'price' => 100000,
             'status' => BookingDetailStatus::WAITING->value,
         ]);
@@ -529,14 +548,14 @@ class AdminRequirementTest extends TestCase
         BookingDetail::create([
             'fk_booking_id' => $existing->id,
             'play_date' => $playDate,
-            'start_play_time' => '16:00:00',
-            'end_play_time' => '17:00:00',
+            'start_play_time' => self::TIME_16,
+            'end_play_time' => self::TIME_17,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/create-booking', [
+            ->postJson(self::ENDPOINT_CREATE_BOOKING, [
                 'user_id' => $this->admin->id,
                 'field_id' => $this->assignedField->id,
                 'team_name' => 'Offline Tabrak FC',
@@ -577,14 +596,14 @@ class AdminRequirementTest extends TestCase
         $detail = BookingDetail::create([
             'fk_booking_id' => $booking->id,
             'play_date' => Carbon::tomorrow()->toDateString(),
-            'start_play_time' => '17:00:00',
+            'start_play_time' => self::TIME_17,
             'end_play_time' => '18:00:00',
             'price' => 100000,
             'status' => BookingDetailStatus::WAITING->value,
         ]);
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/payment-booking', [
+            ->postJson(self::ENDPOINT_PAYMENT_BOOKING, [
                 'booking_id' => $booking->id,
                 'booking_detail_id' => $detail->id,
                 'payment_type' => PaymentType::FINAL_PAYMENT->value,
@@ -634,13 +653,13 @@ class AdminRequirementTest extends TestCase
             'fk_booking_id' => $existing->id,
             'play_date' => $playDate,
             'start_play_time' => '19:00:00',
-            'end_play_time' => '20:00:00',
+            'end_play_time' => self::TIME_20,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/create-booking', [
+            ->postJson(self::ENDPOINT_CREATE_BOOKING, [
                 'user_id' => $this->admin->id,
                 'field_id' => $this->assignedField->id,
                 'team_name' => 'Offline Bentrok FC',
@@ -677,8 +696,8 @@ class AdminRequirementTest extends TestCase
         $detail = BookingDetail::create([
             'fk_booking_id' => $booking->id,
             'play_date' => Carbon::tomorrow()->toDateString(),
-            'start_play_time' => '20:00:00',
-            'end_play_time' => '21:00:00',
+            'start_play_time' => self::TIME_20,
+            'end_play_time' => self::TIME_21,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
@@ -695,13 +714,13 @@ class AdminRequirementTest extends TestCase
 
         // 1. Cek detail sebelum pelunasan -> sisa tagihan 50.000 (menampilkan tombol pelunasan)
         $detailBefore = $this->actingAs($this->admin, 'sanctum')
-            ->getJson("/api/admin/detail-booking/{$detail->id}");
+            ->getJson(self::ENDPOINT_DETAIL_BOOKING_PREFIX . $detail->id);
         $detailBefore->assertStatus(200);
-        $this->assertSame(50000, $detailBefore->json('data.sessions.0.remaining_payment'));
+        $this->assertSame(50000, $detailBefore->json(self::JSON_FIRST_SESSION_REMAINING));
 
         // 2. Eksekusi pelunasan sisa 50.000
         $payResponse = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/payment-booking', [
+            ->postJson(self::ENDPOINT_PAYMENT_BOOKING, [
                 'booking_id' => $booking->id,
                 'booking_detail_id' => $detail->id,
                 'payment_type' => PaymentType::FINAL_PAYMENT->value,
@@ -712,9 +731,9 @@ class AdminRequirementTest extends TestCase
 
         // 3. Cek detail setelah pelunasan -> sisa tagihan menjadi 0
         $detailAfter = $this->actingAs($this->admin, 'sanctum')
-            ->getJson("/api/admin/detail-booking/{$detail->id}");
+            ->getJson(self::ENDPOINT_DETAIL_BOOKING_PREFIX . $detail->id);
         $detailAfter->assertStatus(200);
-        $this->assertSame(0, $detailAfter->json('data.sessions.0.remaining_payment'));
+        $this->assertSame(0, $detailAfter->json(self::JSON_FIRST_SESSION_REMAINING));
         $this->assertSame(100000, $detailAfter->json('data.sessions.0.total_paid'));
     }
 
@@ -733,8 +752,8 @@ class AdminRequirementTest extends TestCase
         $detail = BookingDetail::create([
             'fk_booking_id' => $booking->id,
             'play_date' => Carbon::tomorrow()->toDateString(),
-            'start_play_time' => '20:00:00',
-            'end_play_time' => '21:00:00',
+            'start_play_time' => self::TIME_20,
+            'end_play_time' => self::TIME_21,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
@@ -751,9 +770,9 @@ class AdminRequirementTest extends TestCase
 
         // Tombol Batal ditekan -> tidak ada request pelunasan
         $detailAfter = $this->actingAs($this->admin, 'sanctum')
-            ->getJson("/api/admin/detail-booking/{$detail->id}");
+            ->getJson(self::ENDPOINT_DETAIL_BOOKING_PREFIX . $detail->id);
         $detailAfter->assertStatus(200);
-        $this->assertSame(50000, $detailAfter->json('data.sessions.0.remaining_payment'));
+        $this->assertSame(50000, $detailAfter->json(self::JSON_FIRST_SESSION_REMAINING));
     }
 
     /**
@@ -771,14 +790,14 @@ class AdminRequirementTest extends TestCase
         $detail = BookingDetail::create([
             'fk_booking_id' => $booking->id,
             'play_date' => Carbon::tomorrow()->toDateString(),
-            'start_play_time' => '20:00:00',
-            'end_play_time' => '21:00:00',
+            'start_play_time' => self::TIME_20,
+            'end_play_time' => self::TIME_21,
             'price' => 100000,
             'status' => BookingDetailStatus::CANCELLED->value,
         ]);
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/payment-booking', [
+            ->postJson(self::ENDPOINT_PAYMENT_BOOKING, [
                 'booking_id' => $booking->id,
                 'booking_detail_id' => $detail->id,
                 'payment_type' => PaymentType::FINAL_PAYMENT->value,
@@ -814,8 +833,8 @@ class AdminRequirementTest extends TestCase
         BookingDetail::create([
             'fk_booking_id' => $b1->id,
             'play_date' => $playDate,
-            'start_play_time' => '10:00:00',
-            'end_play_time' => '11:00:00',
+            'start_play_time' => self::TIME_10,
+            'end_play_time' => self::TIME_11,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
@@ -829,7 +848,7 @@ class AdminRequirementTest extends TestCase
         BookingDetail::create([
             'fk_booking_id' => $b2->id,
             'play_date' => $playDate,
-            'start_play_time' => '12:00:00',
+            'start_play_time' => self::TIME_12,
             'end_play_time' => '13:00:00',
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
@@ -861,8 +880,8 @@ class AdminRequirementTest extends TestCase
         BookingDetail::create([
             'fk_booking_id' => $b1->id,
             'play_date' => $dateA,
-            'start_play_time' => '10:00:00',
-            'end_play_time' => '11:00:00',
+            'start_play_time' => self::TIME_10,
+            'end_play_time' => self::TIME_11,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
@@ -876,8 +895,8 @@ class AdminRequirementTest extends TestCase
         BookingDetail::create([
             'fk_booking_id' => $b2->id,
             'play_date' => $dateB,
-            'start_play_time' => '10:00:00',
-            'end_play_time' => '11:00:00',
+            'start_play_time' => self::TIME_10,
+            'end_play_time' => self::TIME_11,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
@@ -905,8 +924,8 @@ class AdminRequirementTest extends TestCase
         $detailOutside = BookingDetail::create([
             'fk_booking_id' => $bOutside->id,
             'play_date' => Carbon::tomorrow()->toDateString(),
-            'start_play_time' => '10:00:00',
-            'end_play_time' => '11:00:00',
+            'start_play_time' => self::TIME_10,
+            'end_play_time' => self::TIME_11,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
@@ -937,8 +956,8 @@ class AdminRequirementTest extends TestCase
                 'pricing_rules' => [
                     [
                         'day_type' => 'monday',
-                        'start_time' => '08:00:00',
-                        'end_time' => '17:00:00',
+                        'start_time' => self::TIME_08,
+                        'end_time' => self::TIME_17,
                         'price' => 125000,
                     ],
                 ],
@@ -1056,16 +1075,16 @@ class AdminRequirementTest extends TestCase
         FieldPrice::create([
             'fk_field_id' => $this->assignedField->id,
             'day_type' => strtolower(Carbon::parse($targetDate)->englishDayOfWeek),
-            'start_time' => '08:00:00',
-            'end_time' => '12:00:00',
+            'start_time' => self::TIME_08,
+            'end_time' => self::TIME_12,
             'price' => 100000,
         ]);
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/close-field', [
+            ->postJson(self::ENDPOINT_CLOSE_FIELD, [
                 'fk_field_id' => $this->assignedField->id,
-                'field_closure_start_time' => "{$targetDate} 08:00:00",
-                'field_closure_end_time' => "{$targetDate} 12:00:00",
+                'field_closure_start_time' => $targetDate . ' ' . self::TIME_08,
+                'field_closure_end_time' => $targetDate . ' ' . self::TIME_12,
                 'reason' => 'Perbaikan rumput sintetis',
             ]);
 
@@ -1078,9 +1097,9 @@ class AdminRequirementTest extends TestCase
         ]);
 
         $avail = $this->actingAs($this->admin, 'sanctum')
-            ->getJson("/api/admin/check-slot-availability/{$this->assignedField->id}/{$targetDate}");
+            ->getJson(self::ENDPOINT_CHECK_AVAILABILITY_PREFIX . $this->assignedField->id . '/' . $targetDate);
         $avail->assertStatus(200);
-        $this->assertFalse($avail->json('available_slots.available_slots.0.is_available'));
+        $this->assertFalse($avail->json(self::JSON_FIRST_SLOT_AVAILABLE));
         $this->assertTrue($avail->json('available_slots.available_slots.0.is_closed'));
     }
 
@@ -1102,10 +1121,10 @@ class AdminRequirementTest extends TestCase
         $yesterday = Carbon::yesterday()->toDateString();
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/close-field', [
+            ->postJson(self::ENDPOINT_CLOSE_FIELD, [
                 'fk_field_id' => $this->assignedField->id,
-                'field_closure_start_time' => "{$yesterday} 08:00:00",
-                'field_closure_end_time' => "{$yesterday} 12:00:00",
+                'field_closure_start_time' => $yesterday . ' ' . self::TIME_08,
+                'field_closure_end_time' => $yesterday . ' ' . self::TIME_12,
                 'reason' => 'Tanggal masa lalu',
             ]);
 
@@ -1135,17 +1154,17 @@ class AdminRequirementTest extends TestCase
         $detail = BookingDetail::create([
             'fk_booking_id' => $booking->id,
             'play_date' => $targetDate,
-            'start_play_time' => '09:00:00',
-            'end_play_time' => '10:00:00',
+            'start_play_time' => self::TIME_09,
+            'end_play_time' => self::TIME_10,
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/close-field', [
+            ->postJson(self::ENDPOINT_CLOSE_FIELD, [
                 'fk_field_id' => $this->assignedField->id,
-                'field_closure_start_time' => "{$targetDate} 08:00:00",
-                'field_closure_end_time' => "{$targetDate} 12:00:00",
+                'field_closure_start_time' => $targetDate . ' ' . self::TIME_08,
+                'field_closure_end_time' => $targetDate . ' ' . self::TIME_12,
                 'reason' => 'Hujan badai darurat',
             ]);
 
@@ -1171,10 +1190,10 @@ class AdminRequirementTest extends TestCase
         $targetDate = Carbon::tomorrow()->toDateString();
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/close-field', [
+            ->postJson(self::ENDPOINT_CLOSE_FIELD, [
                 'fk_field_id' => $this->assignedField->id,
-                'field_closure_start_time' => "{$targetDate} 08:00:00",
-                'field_closure_end_time' => "{$targetDate} 12:00:00",
+                'field_closure_start_time' => $targetDate . ' ' . self::TIME_08,
+                'field_closure_end_time' => $targetDate . ' ' . self::TIME_12,
                 'reason' => 'Perawatan rutin tanpa booking',
             ]);
 
@@ -1205,10 +1224,10 @@ class AdminRequirementTest extends TestCase
         $this->app->instance(FieldService::class, $mockFieldService);
 
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/close-field', [
+            ->postJson(self::ENDPOINT_CLOSE_FIELD, [
                 'fk_field_id' => $this->assignedField->id,
-                'field_closure_start_time' => "{$targetDate} 08:00:00",
-                'field_closure_end_time' => "{$targetDate} 12:00:00",
+                'field_closure_start_time' => $targetDate . ' ' . self::TIME_08,
+                'field_closure_end_time' => $targetDate . ' ' . self::TIME_12,
                 'reason' => 'Simulasi error',
             ]);
 
@@ -1229,7 +1248,7 @@ class AdminRequirementTest extends TestCase
     public function test_tc_adm_12_1_berhasil_tambah_master_atribut_saat_input_valid(): void
     {
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/create-attribute', [
+            ->postJson(self::ENDPOINT_CREATE_ATTRIBUTE, [
                 'fk_field_id' => $this->assignedField->id,
                 'name' => 'Rompi Latihan',
                 'type' => 'Pakaian',
@@ -1268,7 +1287,7 @@ class AdminRequirementTest extends TestCase
     public function test_tc_adm_12_3_menolak_tambah_atribut_saat_stok_atau_tarif_negatif(): void
     {
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/create-attribute', [
+            ->postJson(self::ENDPOINT_CREATE_ATTRIBUTE, [
                 'fk_field_id' => $this->assignedField->id,
                 'name' => 'Bola Futsal',
                 'type' => 'Bola',
@@ -1289,7 +1308,7 @@ class AdminRequirementTest extends TestCase
     public function test_tc_adm_12_4_menolak_tambah_atribut_mengandung_skrip_xss(): void
     {
         $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/admin/create-attribute', [
+            ->postJson(self::ENDPOINT_CREATE_ATTRIBUTE, [
                 'fk_field_id' => $this->assignedField->id,
                 'name' => '<script>alert("XSS")</script>',
                 'type' => 'Sepatu',
