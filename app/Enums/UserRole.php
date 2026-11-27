@@ -8,4 +8,5 @@ enum UserRole: string
     case TREASURER = 'treasurer';
     case WORKER = 'worker';
     case TENANT = 'tenant';
+    case ADMIN = 'admin';
 }
