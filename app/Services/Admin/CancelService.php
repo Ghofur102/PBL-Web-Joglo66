@@ -42,31 +42,14 @@ class CancelService
             ]);
 
             if ($data['status_refund'] !== CancelRefundStatus::NONE->value && $refundAmount > 0) {
-                Payment::create([
-                    'fk_booking_id' => $detail->fk_booking_id,
-                    'fk_booking_detail_id' => $detail->id,
-                    'reference_id' => 'CNL-REF-'.strtoupper(Str::random(10)),
-                    'payment_type' => PaymentType::REFUND->value,
-                    'method' => 'cash',
-                    'amount' => $refundAmount,
-                    'status' => PaymentStatus::SUCCESS->value,
-                    'paid_at' => now(),
-                ]);
+                $this->createRefundPayment($detail, $refundAmount);
             }
 
-            $tenant = $detail->booking->user;
-            if ($tenant) {
-                $tenant->notify(new GeneralBookingNotification([
-                    'title' => 'Jadwal Bermain Dibatalkan',
-                    'message' => "Jadwal sewa pada booking #{$detail->fk_booking_id} telah dibatalkan oleh pihak pengelola.",
-                    'type' => 'cancel_by_admin',
-                    'booking_id' => $detail->fk_booking_id,
-                    'url' => route('tenant.booking.history.show', $detail->fk_booking_id),
-                    'sender_id' => $actor->id,
-                    'sender_name' => $actor->name,
-                    'sender_role' => $actor->role,
-                ]));
-            }
+            $this->notifyTenant($detail, $actor, [
+                'title' => 'Jadwal Bermain Dibatalkan',
+                'message' => "Jadwal sewa pada booking #{$detail->fk_booking_id} telah dibatalkan oleh pihak pengelola.",
+                'type' => 'cancel_by_admin',
+            ]);
         });
     }
 
@@ -101,31 +84,14 @@ class CancelService
                 ->update(['status' => PaymentStatus::FAILED->value]);
 
             if (strtolower($statusRefund) !== 'none' && $refundAmount > 0) {
-                Payment::create([
-                    'fk_booking_id' => $detail->fk_booking_id,
-                    'fk_booking_detail_id' => $detail->id,
-                    'reference_id' => 'CNL-REF-'.strtoupper(Str::random(10)),
-                    'payment_type' => PaymentType::REFUND->value,
-                    'method' => 'cash',
-                    'amount' => $refundAmount,
-                    'status' => PaymentStatus::SUCCESS->value,
-                    'paid_at' => now(),
-                ]);
+                $this->createRefundPayment($detail, $refundAmount);
             }
 
-            $tenant = $detail->booking->user;
-            if ($tenant) {
-                $tenant->notify(new GeneralBookingNotification([
-                    'title' => 'Pengajuan Pembatalan Disetujui',
-                    'message' => "Permohonan pembatalan booking #{$detail->fk_booking_id} telah disetujui.",
-                    'type' => 'cancel_approved',
-                    'booking_id' => $detail->fk_booking_id,
-                    'url' => route('tenant.booking.history.show', $detail->fk_booking_id),
-                    'sender_id' => $actor->id,
-                    'sender_name' => $actor->name,
-                    'sender_role' => $actor->role,
-                ]));
-            }
+            $this->notifyTenant($detail, $actor, [
+                'title' => 'Pengajuan Pembatalan Disetujui',
+                'message' => "Permohonan pembatalan booking #{$detail->fk_booking_id} telah disetujui.",
+                'type' => 'cancel_approved',
+            ]);
         });
     }
 
@@ -146,19 +112,40 @@ class CancelService
                 'rejection_reason' => $reason,
             ]);
 
-            $tenant = $detail->booking->user;
-            if ($tenant) {
-                $tenant->notify(new GeneralBookingNotification([
-                    'title' => 'Pengajuan Pembatalan Ditolak',
-                    'message' => "Permohonan pembatalan booking #{$detail->fk_booking_id} ditolak. Alasan: {$reason}",
-                    'type' => 'cancel_rejected',
-                    'booking_id' => $detail->fk_booking_id,
-                    'url' => route('tenant.booking.history.show', $detail->fk_booking_id),
-                    'sender_id' => $actor->id,
-                    'sender_name' => $actor->name,
-                    'sender_role' => $actor->role,
-                ]));
-            }
+            $this->notifyTenant($detail, $actor, [
+                'title' => 'Pengajuan Pembatalan Ditolak',
+                'message' => "Permohonan pembatalan booking #{$detail->fk_booking_id} ditolak. Alasan: {$reason}",
+                'type' => 'cancel_rejected',
+            ]);
         });
+    }
+
+    private function createRefundPayment(BookingDetail $detail, int $refundAmount): void
+    {
+        Payment::create([
+            'fk_booking_id' => $detail->fk_booking_id,
+            'fk_booking_detail_id' => $detail->id,
+            'reference_id' => 'CNL-REF-'.strtoupper(Str::random(10)),
+            'payment_type' => PaymentType::REFUND->value,
+            'method' => 'cash',
+            'amount' => $refundAmount,
+            'status' => PaymentStatus::SUCCESS->value,
+            'paid_at' => now(),
+        ]);
+    }
+
+    private function notifyTenant(BookingDetail $detail, User $actor, array $notification): void
+    {
+        $tenant = $detail->booking->user;
+        if ($tenant) {
+            $tenant->notify(new GeneralBookingNotification([
+                ...$notification,
+                'booking_id' => $detail->fk_booking_id,
+                'url' => route('tenant.booking.history.show', $detail->fk_booking_id),
+                'sender_id' => $actor->id,
+                'sender_name' => $actor->name,
+                'sender_role' => $actor->role,
+            ]));
+        }
     }
 }

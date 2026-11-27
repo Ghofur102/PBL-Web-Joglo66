@@ -10,6 +10,7 @@ use App\Services\Treasure\SalaryService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Tests\Traits\UsesInMemoryDatabase;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
@@ -17,19 +18,15 @@ use Tests\TestCase;
 #[RunTestsInSeparateProcesses]
 class SalaryServiceTest extends TestCase
 {
+    use UsesInMemoryDatabase;
+
     private const DATE_20260101 = '2026-01-01';
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $connection = config('database.connections.sqlite');
-        $connection['database'] = ':memory:';
-        config([
-            'database.default' => 'mysql_joglo66_app',
-            'database.connections.mysql_joglo66_app' => $connection,
-        ]);
-        DB::purge('mysql_joglo66_app');
+        $this->setUpInMemoryDatabase();
 
         Schema::connection('mysql_joglo66_app')->create('fields', function (Blueprint $table): void {
             $table->id();

@@ -16,8 +16,8 @@ use App\Services\Tenant\Booking\TenantCancelBookingService;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Tests\Traits\UsesInMemoryDatabase;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use ReflectionMethod;
 use Tests\TestCase;
@@ -25,6 +25,8 @@ use Tests\TestCase;
 #[RunTestsInSeparateProcesses]
 class TenantCancelBookingServiceTest extends TestCase
 {
+    use UsesInMemoryDatabase;
+
     private const DATE_20261101 = '2026-11-01';
     private const TEAM_NAME = 'Joglo team';
 
@@ -32,13 +34,7 @@ class TenantCancelBookingServiceTest extends TestCase
     {
         parent::setUp();
 
-        $connection = config('database.connections.sqlite');
-        $connection['database'] = ':memory:';
-        config([
-            'database.default' => 'mysql_joglo66_app',
-            'database.connections.mysql_joglo66_app' => $connection,
-        ]);
-        DB::purge('mysql_joglo66_app');
+        $this->setUpInMemoryDatabase();
 
         Schema::connection('mysql_joglo66_app')->create('users', function (Blueprint $table): void {
             $table->id();

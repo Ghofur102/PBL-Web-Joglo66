@@ -10,15 +10,17 @@ use App\Services\Tenant\TenantDashboardService;
 use Carbon\Carbon;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use ReflectionMethod;
 use Tests\TestCase;
+use Tests\Traits\UsesInMemoryDatabase;
 
 #[RunTestsInSeparateProcesses]
 class TenantDashboardServiceTest extends TestCase
 {
+    use UsesInMemoryDatabase;
+
     private const MAIN_FIELD = 'Main field';
     private const TEAM_NAME = 'Joglo team';
     private const NOW_20261025_120000 = '2026-10-25 12:00:00';
@@ -27,13 +29,7 @@ class TenantDashboardServiceTest extends TestCase
     {
         parent::setUp();
 
-        $connection = config('database.connections.sqlite');
-        $connection['database'] = ':memory:';
-        config([
-            'database.default' => 'mysql_joglo66_app',
-            'database.connections.mysql_joglo66_app' => $connection,
-        ]);
-        DB::purge('mysql_joglo66_app');
+        $this->setUpInMemoryDatabase();
 
         Schema::connection('mysql_joglo66_app')->create('users', function (Blueprint $table): void {
             $table->id();

@@ -26,48 +26,35 @@ class ExpenseController extends Controller
 
     public function listExpense(Request $request): JsonResponse
     {
-        $status = 200;
-        $data = [];
-
         try {
-            $user = $request->user();
-            $fieldIds = [];
+            $expenses = $this->expenseService->getExpenses($this->resolveFieldIds($request));
 
-            if ($user && in_array($user->role, ['worker', 'treasurer'], true)) {
-                $fieldIds = $this->getAccessibleFieldIds($user);
-            }
-
-            $expenses = $this->expenseService->getExpenses($fieldIds);
-            $data = ['success' => true, 'data' => $expenses];
+            return response()->json(['success' => true, 'data' => $expenses]);
         } catch (Throwable $e) {
-            $status = 500;
-            $data = ['success' => false, 'message' => 'Gagal memuat data pengeluaran: '.$e->getMessage()];
+            return response()->json(['success' => false, 'message' => 'Gagal memuat data pengeluaran: '.$e->getMessage()], 500);
         }
-
-        return response()->json($data, $status);
     }
 
     public function getCategories(Request $request): JsonResponse
     {
-        $status = 200;
-        $data = [];
-
         try {
-            $user = $request->user();
-            $fieldIds = [];
+            $categories = $this->expenseService->getUniqueCategories($this->resolveFieldIds($request));
 
-            if ($user && in_array($user->role, ['worker', 'treasurer'], true)) {
-                $fieldIds = $this->getAccessibleFieldIds($user);
-            }
-
-            $categories = $this->expenseService->getUniqueCategories($fieldIds);
-            $data = ['success' => true, 'data' => $categories];
+            return response()->json(['success' => true, 'data' => $categories]);
         } catch (Throwable $e) {
-            $status = 500;
-            $data = ['success' => false, 'message' => 'Gagal memuat daftar kategori: '.$e->getMessage()];
+            return response()->json(['success' => false, 'message' => 'Gagal memuat daftar kategori: '.$e->getMessage()], 500);
+        }
+    }
+
+    private function resolveFieldIds(Request $request): array
+    {
+        $user = $request->user();
+
+        if ($user && in_array($user->role, ['worker', 'treasurer'], true)) {
+            return $this->getAccessibleFieldIds($user);
         }
 
-        return response()->json($data, $status);
+        return [];
     }
 
     public function addExpense(Request $request): JsonResponse

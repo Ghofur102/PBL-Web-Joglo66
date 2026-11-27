@@ -14,6 +14,7 @@ use App\Services\Tenant\Booking\TenantBookingService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Tests\Traits\UsesInMemoryDatabase;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use ReflectionMethod;
 use Tests\TestCase;
@@ -22,6 +23,8 @@ use UnexpectedValueException;
 #[RunTestsInSeparateProcesses]
 class TenantBookingServiceTest extends TestCase
 {
+    use UsesInMemoryDatabase;
+
     private const TEAM_NAME = 'Joglo team';
     private const TENANT_EMAIL = 'tenant@example.com';
     private const TIME_080000 = '08:00:00';
@@ -32,13 +35,7 @@ class TenantBookingServiceTest extends TestCase
     {
         parent::setUp();
 
-        $connection = config('database.connections.sqlite');
-        $connection['database'] = ':memory:';
-        config([
-            'database.default' => 'mysql_joglo66_app',
-            'database.connections.mysql_joglo66_app' => $connection,
-        ]);
-        DB::purge('mysql_joglo66_app');
+        $this->setUpInMemoryDatabase();
 
         Schema::connection('mysql_joglo66_app')->create('fields', function (Blueprint $table): void {
             $table->id();

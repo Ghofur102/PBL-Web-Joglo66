@@ -29,11 +29,7 @@ class CancelController extends Controller
     public function __invoke(CancelBookingRequest $request, $detail_booking_id): JsonResponse
     {
         try {
-            $detail = BookingDetail::query()->findOrFail($detail_booking_id);
-
-            if (! $this->checkFieldAccess($request->user(), $detail->booking->fk_field_id)) {
-                throw new HttpException(403, self::UNAUTHORIZED_MESSAGE);
-            }
+            $detail = $this->resolveDetail($detail_booking_id, $request->user());
 
             $this->cancelService->execute($detail, $request->validated(), $request->user());
 
@@ -59,11 +55,7 @@ class CancelController extends Controller
         ]);
 
         try {
-            $detail = BookingDetail::query()->findOrFail($detail_booking_id);
-
-            if (! $this->checkFieldAccess($request->user(), $detail->booking->fk_field_id)) {
-                throw new HttpException(403, self::UNAUTHORIZED_MESSAGE);
-            }
+            $detail = $this->resolveDetail($detail_booking_id, $request->user());
 
             $this->cancelService->approve(
                 $detail,
@@ -91,11 +83,7 @@ class CancelController extends Controller
         ]);
 
         try {
-            $detail = BookingDetail::query()->findOrFail($detail_booking_id);
-
-            if (! $this->checkFieldAccess($request->user(), $detail->booking->fk_field_id)) {
-                throw new HttpException(403, self::UNAUTHORIZED_MESSAGE);
-            }
+            $detail = $this->resolveDetail($detail_booking_id, $request->user());
 
             $this->cancelService->reject($detail, $request->input('rejection_reason'), $request->user());
 
@@ -110,5 +98,16 @@ class CancelController extends Controller
         } catch (Throwable $e) {
             return response()->json(['success' => false, 'message' => 'Gagal menolak: '.$e->getMessage()], 500);
         }
+    }
+
+    private function resolveDetail(int|string $detailBookingId, ?object $user): BookingDetail
+    {
+        $detail = BookingDetail::query()->findOrFail($detailBookingId);
+
+        if (! $this->checkFieldAccess($user, $detail->booking->fk_field_id)) {
+            throw new HttpException(403, self::UNAUTHORIZED_MESSAGE);
+        }
+
+        return $detail;
     }
 }
