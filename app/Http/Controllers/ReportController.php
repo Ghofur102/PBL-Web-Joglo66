@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\FinancialReportService;
 use App\Http\Controllers\Traits\FieldAccessTrait;
+use App\Services\FinancialReportService;
 use Carbon\Carbon;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
 class ReportController extends Controller
@@ -31,10 +34,17 @@ class ReportController extends Controller
             $fieldIds = $this->normalizeFieldIds($request->input('field_ids'));
 
             if ($user && $user->role === 'worker') {
-                $fieldIds = array_values(array_intersect(
-                    $this->getAccessibleFieldIds($user),
-                    $fieldIds,
-                ));
+                $accessibleFieldIds = $this->getAccessibleFieldIds($user);
+
+                if (empty($accessibleFieldIds)) {
+                    throw new AccessDeniedHttpException('Anda belum ditugaskan ke lapangan manapun.');
+                }
+
+                if ($request->filled('field_ids') && array_diff($fieldIds, $accessibleFieldIds)) {
+                    throw new AccessDeniedHttpException('Anda tidak memiliki akses ke salah satu lapangan yang diminta.');
+                }
+
+                $fieldIds = $request->filled('field_ids') ? $fieldIds : $accessibleFieldIds;
             }
 
             $month = (int) ($request->month ?? date('m'));
@@ -55,11 +65,16 @@ class ReportController extends Controller
             $data = [
                 'success' => true,
                 'message' => 'Laporan kas bulanan berhasil diambil.',
-                'data'    => $reportData,
+                'data' => $reportData,
             ];
         } catch (Throwable $e) {
-            Log::error('Laporan Bulanan Error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
-            $status = $e instanceof \Illuminate\Validation\ValidationException ? 422 : 500;
+            Log::error('Laporan Bulanan Error: '.$e->getMessage()."\n".$e->getTraceAsString());
+            $status = match (true) {
+                $e instanceof HttpExceptionInterface => $e->getStatusCode(),
+                $e instanceof ValidationException,
+                $e instanceof \InvalidArgumentException => 422,
+                default => 500,
+            };
             $data = [
                 'success' => false,
                 'message' => $e->getMessage(),
@@ -77,10 +92,19 @@ class ReportController extends Controller
 
         $values = is_array($fieldIds) ? $fieldIds : explode(',', (string) $fieldIds);
 
-        return array_values(array_unique(array_filter(array_map(
-            fn (mixed $value) => is_numeric($value) ? (int) $value : null,
-            $values,
-        ))));
+        $normalized = [];
+        foreach ($values as $value) {
+            $fieldId = filter_var($value, FILTER_VALIDATE_INT);
+            if ($fieldId === false || $fieldId < 1) {
+                throw ValidationException::withMessages([
+                    'field_ids' => 'ID lapangan tidak valid.',
+                ]);
+            }
+
+            $normalized[] = $fieldId;
+        }
+
+        return array_values(array_unique($normalized));
     }
 
     protected function validateReportFilters(
@@ -100,15 +124,15 @@ class ReportController extends Controller
         }
 
         $validReportTypes = ['all', 'income', 'expense', 'field', 'rental'];
-        if (!in_array((string) $reportType, $validReportTypes, true)) {
+        if (! in_array((string) $reportType, $validReportTypes, true)) {
             throw new \InvalidArgumentException('Tipe laporan tidak valid.');
         }
 
-        if ($startDate !== null && !$this->isValidDate($startDate)) {
+        if ($startDate !== null && ! $this->isValidDate($startDate)) {
             throw new \InvalidArgumentException('Format tanggal awal tidak valid.');
         }
 
-        if ($endDate !== null && !$this->isValidDate($endDate)) {
+        if ($endDate !== null && ! $this->isValidDate($endDate)) {
             throw new \InvalidArgumentException('Format tanggal akhir tidak valid.');
         }
 
@@ -125,7 +149,7 @@ class ReportController extends Controller
 
     protected function isValidDate(mixed $date): bool
     {
-        if (!is_string($date) || $date === '') {
+        if (! is_string($date) || $date === '') {
             return false;
         }
 

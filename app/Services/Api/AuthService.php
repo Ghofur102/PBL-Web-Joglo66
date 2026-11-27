@@ -2,13 +2,13 @@
 
 namespace App\Services\Api;
 
-use App\Models\User;
 use App\Enums\UserRole;
-use Illuminate\Support\Facades\Hash;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AuthService
 {
@@ -16,7 +16,7 @@ class AuthService
     {
         $user = User::where('email', $credentials['email'])->first();
 
-        if (!$user || !Hash::check($credentials['password'], $user->password)) {
+        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw new HttpException(401, 'Email atau password salah.');
         }
 
@@ -24,11 +24,15 @@ class AuthService
             throw new AccessDeniedHttpException('Akses ditolak. Aplikasi ini khusus untuk Manajemen.');
         }
 
+        if ($user->employee && $user->employee->status !== 'active') {
+            throw new AccessDeniedHttpException('Akun karyawan tidak aktif.');
+        }
+
         if ($user->role === UserRole::WORKER->value) {
             $tableName = Schema::hasTable('field_workers') ? 'field_workers' : 'field_admins';
             $hasField = DB::table($tableName)->where('fk_user_id', $user->id)->exists();
 
-            if (!$hasField) {
+            if (! $hasField) {
                 throw new AccessDeniedHttpException('Akses ditolak. Anda belum ditugaskan untuk menjaga lapangan manapun. Silakan hubungi Owner.');
             }
         }
@@ -37,7 +41,7 @@ class AuthService
 
         return [
             'token' => $token,
-            'user'  => $user
+            'user' => $user,
         ];
     }
 
