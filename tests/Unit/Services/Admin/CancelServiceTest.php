@@ -8,8 +8,8 @@ use App\Notifications\GeneralBookingNotification;
 use App\Services\Admin\CancelService;
 use DomainException;
 use Illuminate\Support\Facades\Notification;
-use Tests\Unit\Services\ServiceTestCase;
-use Tests\Unit\Services\ServiceTestData;
+use Tests\ServiceTestCase;
+use Tests\ServiceTestData;
 
 class CancelServiceTest extends ServiceTestCase
 {

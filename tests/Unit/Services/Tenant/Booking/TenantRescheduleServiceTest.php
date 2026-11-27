@@ -8,8 +8,8 @@ use DomainException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\DB;
-use Tests\Unit\Services\ServiceTestData;
-use Tests\Unit\Services\ServiceTestCase;
+use Tests\ServiceTestData;
+use Tests\ServiceTestCase;
 
 class TenantRescheduleServiceTest extends ServiceTestCase
 {

@@ -7,8 +7,8 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
-use Tests\Unit\Services\ServiceTestCase;
-use Tests\Unit\Services\ServiceTestData;
+use Tests\ServiceTestCase;
+use Tests\ServiceTestData;
 
 #[RunTestsInSeparateProcesses]
 class AttributeRentalServiceTest extends ServiceTestCase

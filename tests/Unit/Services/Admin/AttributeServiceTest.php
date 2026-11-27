@@ -3,8 +3,8 @@
 namespace Tests\Unit\Services\Admin;
 
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
-use Tests\Unit\Services\ServiceTestCase;
-use Tests\Unit\Services\ServiceTestData;
+use Tests\ServiceTestCase;
+use Tests\ServiceTestData;
 use App\Services\Admin\AttributeService;
 
 class AttributeServiceTest extends ServiceTestCase

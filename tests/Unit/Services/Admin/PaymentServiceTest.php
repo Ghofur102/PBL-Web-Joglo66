@@ -7,8 +7,8 @@ use App\Enums\PaymentType;
 use App\Services\Admin\PaymentService;
 use App\Models\Booking;
 use Symfony\Component\HttpKernel\Exception\HttpException;
-use Tests\Unit\Services\ServiceTestData;
-use Tests\Unit\Services\ServiceTestCase;
+use Tests\ServiceTestData;
+use Tests\ServiceTestCase;
 
 class PaymentServiceTest extends ServiceTestCase
 {

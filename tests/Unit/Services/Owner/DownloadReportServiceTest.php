@@ -8,8 +8,8 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Barryvdh\DomPDF\PDF as DomPdf;
 use Mockery;
 use Symfony\Component\HttpKernel\Exception\HttpException;
-use Tests\Unit\Services\ServiceTestData;
-use Tests\Unit\Services\ServiceTestCase;
+use Tests\ServiceTestData;
+use Tests\ServiceTestCase;
 
 class DownloadReportServiceTest extends ServiceTestCase
 {

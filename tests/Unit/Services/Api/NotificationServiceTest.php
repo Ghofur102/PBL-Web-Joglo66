@@ -7,8 +7,8 @@ use App\Models\BookingCancelled;
 use App\Models\BookingReschedule;
 use App\Services\Api\NotificationService;
 use Illuminate\Support\Str;
-use Tests\Unit\Services\ServiceTestData;
-use Tests\Unit\Services\ServiceTestCase;
+use Tests\ServiceTestData;
+use Tests\ServiceTestCase;
 use Illuminate\Pagination\Paginator;
 
 class NotificationServiceTest extends ServiceTestCase
