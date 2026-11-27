@@ -138,17 +138,7 @@ class SalaryUpdateTest extends TestCase
             ->assertJsonValidationErrors(['amount_paid']);
 
         // Assert data gaji di database TIDAK berubah (tetap nilai awal Rp 2.000.000)
-        $this->assertDatabaseHas('employee_salaries', [
-            'fk_employee_id' => $this->employee->id,
-            'period_month' => 'january',
-            'period_year' => 2026,
-            'amount_paid' => 2000000,
-        ]);
-
-        $this->assertDatabaseMissing('employee_salaries', [
-            'fk_employee_id' => $this->employee->id,
-            'amount_paid' => -1,
-        ]);
+        $this->assertInitialSalaryUnchanged(-1);
     }
 
     /**
@@ -181,17 +171,7 @@ class SalaryUpdateTest extends TestCase
             ]);
 
         // Assert data gaji di database TIDAK berubah
-        $this->assertDatabaseHas('employee_salaries', [
-            'fk_employee_id' => $this->employee->id,
-            'period_month' => 'january',
-            'period_year' => 2026,
-            'amount_paid' => 2000000,
-        ]);
-
-        $this->assertDatabaseMissing('employee_salaries', [
-            'fk_employee_id' => $this->employee->id,
-            'amount_paid' => 3000000,
-        ]);
+        $this->assertInitialSalaryUnchanged(3000000);
     }
 
     /**
@@ -207,17 +187,7 @@ class SalaryUpdateTest extends TestCase
         // (Simulasi aksi pembatalan: tidak mengirim payload perubahan ke endpoint update)
 
         // 3. Verifikasi data di database tetap mempertahankan nominal awal Rp 2.000.000
-        $this->assertDatabaseHas('employee_salaries', [
-            'fk_employee_id' => $this->employee->id,
-            'period_month' => 'january',
-            'period_year' => 2026,
-            'amount_paid' => 2000000,
-        ]);
-
-        $this->assertDatabaseMissing('employee_salaries', [
-            'fk_employee_id' => $this->employee->id,
-            'amount_paid' => $draftNominal,
-        ]);
+        $this->assertInitialSalaryUnchanged($draftNominal);
 
         // 4. Verifikasi bahwa data yang tampil saat bendahara membuka data gaji tetap nominal awal
         $response = $this->actingAs($this->treasurer, 'sanctum')
@@ -228,5 +198,20 @@ class SalaryUpdateTest extends TestCase
                 'employee_id' => $this->employee->id,
                 'amount_paid' => 2000000,
             ]);
+    }
+
+    private function assertInitialSalaryUnchanged(int $rejectedAmount): void
+    {
+        $this->assertDatabaseHas('employee_salaries', [
+            'fk_employee_id' => $this->employee->id,
+            'period_month' => 'january',
+            'period_year' => 2026,
+            'amount_paid' => 2000000,
+        ]);
+
+        $this->assertDatabaseMissing('employee_salaries', [
+            'fk_employee_id' => $this->employee->id,
+            'amount_paid' => $rejectedAmount,
+        ]);
     }
 }

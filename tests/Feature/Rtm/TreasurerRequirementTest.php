@@ -82,11 +82,7 @@ class TreasurerRequirementTest extends TestCase
     // FR-TRS-01: Pembaruan Nominal Gaji Bulanan Karyawan
     // =========================================================================
 
-    /**
-     * FR-TRS-01 | TC-TRS-01.1 | Black Box (BVA & EP)
-     * Menguji apakah berhasil memperbarui nominal gaji saat nominal valid (>= 0) dan diakses oleh Bendahara.
-     */
-    public function test_tc_trs_01_1_berhasil_memperbarui_nominal_gaji_saat_nominal_valid(): void
+    private function seedJanuaryInitialSalary(): void
     {
         $expense = Expense::create([
             'fk_field_id' => $this->assignedField->id,
@@ -110,6 +106,15 @@ class TreasurerRequirementTest extends TestCase
             'deduction' => 0,
             'notes' => 'Gaji Awal',
         ]);
+    }
+
+    /**
+     * FR-TRS-01 | TC-TRS-01.1 | Black Box (BVA & EP)
+     * Menguji apakah berhasil memperbarui nominal gaji saat nominal valid (>= 0) dan diakses oleh Bendahara.
+     */
+    public function test_tc_trs_01_1_berhasil_memperbarui_nominal_gaji_saat_nominal_valid(): void
+    {
+        $this->seedJanuaryInitialSalary();
 
         $response = $this->actingAs($this->treasurer, 'sanctum')
             ->postJson(self::ENDPOINT_SALARY_UPDATE, [
@@ -193,28 +198,7 @@ class TreasurerRequirementTest extends TestCase
      */
     public function test_tc_trs_01_4_membatalkan_proses_pembaruan_nominal_gaji_saat_batal(): void
     {
-        $expense = Expense::create([
-            'fk_field_id' => $this->assignedField->id,
-            'fk_user_id' => $this->treasurer->id,
-            'name' => 'Gaji ' . $this->employee->name,
-            'category' => 'Gaji',
-            'quantity' => 1,
-            'unit_price' => 2000000,
-            'expense_date' => self::DATE_JAN_01,
-            'generate_at' => self::DATE_JAN_01,
-        ]);
-
-        EmployeeSalary::create([
-            'fk_employee_id' => $this->employee->id,
-            'fk_expense_id' => $expense->id,
-            'amount_paid' => 2000000,
-            'period_month' => 'january',
-            'period_year' => 2026,
-            'payment_date' => '2026-01-15',
-            'bonus' => 0,
-            'deduction' => 0,
-            'notes' => 'Gaji Awal',
-        ]);
+        $this->seedJanuaryInitialSalary();
 
         // Tombol Batal ditekan: tidak ada request POST /api/treasurer/gaji/update yang dikirim.
         $response = $this->actingAs($this->treasurer, 'sanctum')

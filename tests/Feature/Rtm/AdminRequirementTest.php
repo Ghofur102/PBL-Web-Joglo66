@@ -244,20 +244,12 @@ class AdminRequirementTest extends TestCase
         ]);
 
         // Simulasikan transaksi online penyewa via web di jam 09:00-10:00
-        $booking = Booking::create([
-            'fk_user_id' => $this->tenant->id,
-            'fk_field_id' => $this->assignedField->id,
-            'team_name' => 'Online Web FC',
-            'booking_date' => now()->toDateString(),
-        ]);
-        BookingDetail::create([
-            'fk_booking_id' => $booking->id,
-            'play_date' => $targetDate,
-            'start_play_time' => self::TIME_09,
-            'end_play_time' => self::TIME_10,
-            'price' => 100000,
-            'status' => BookingDetailStatus::ACTIVE->value,
-        ]);
+        $this->createAssignedBookingWithDetail(
+            'Online Web FC',
+            $targetDate,
+            self::TIME_09,
+            self::TIME_10
+        );
 
         $response = $this->actingAs($this->admin, 'sanctum')
             ->getJson(self::ENDPOINT_CHECK_AVAILABILITY_PREFIX . $this->assignedField->id . '/' . $targetDate);
@@ -677,6 +669,46 @@ class AdminRequirementTest extends TestCase
         $response->assertStatus(400);
     }
 
+    private function createAssignedBookingWithDetail(
+        string $teamName,
+        string $playDate,
+        string $startTime,
+        string $endTime,
+        string $status = BookingDetailStatus::ACTIVE->value
+    ): array {
+        $booking = Booking::create([
+            'fk_user_id' => $this->tenant->id,
+            'fk_field_id' => $this->assignedField->id,
+            'team_name' => $teamName,
+            'booking_date' => now()->toDateString(),
+        ]);
+
+        $detail = BookingDetail::create([
+            'fk_booking_id' => $booking->id,
+            'play_date' => $playDate,
+            'start_play_time' => $startTime,
+            'end_play_time' => $endTime,
+            'price' => 100000,
+            'status' => $status,
+        ]);
+
+        return [$booking, $detail];
+    }
+
+    private function createDownPayment(Booking $booking, BookingDetail $detail, string $referenceId, int $amount = 50000): void
+    {
+        Payment::create([
+            'fk_booking_id' => $booking->id,
+            'fk_booking_detail_id' => $detail->id,
+            'reference_id' => $referenceId,
+            'payment_type' => PaymentType::DOWN_PAYMENT->value,
+            'method' => 'cash',
+            'amount' => $amount,
+            'status' => PaymentStatus::SUCCESS->value,
+            'paid_at' => now(),
+        ]);
+    }
+
     // =========================================================================
     // FR-ADM-06: Pelunasan Pembayaran DP Menjadi Lunas
     // =========================================================================
@@ -687,30 +719,13 @@ class AdminRequirementTest extends TestCase
      */
     public function test_tc_adm_06_1_pelunasan_dp_menjadi_lunas_sisa_tagihan_nol(): void
     {
-        $booking = Booking::create([
-            'fk_user_id' => $this->tenant->id,
-            'fk_field_id' => $this->assignedField->id,
-            'team_name' => 'Pelunasan FC',
-            'booking_date' => now()->toDateString(),
-        ]);
-        $detail = BookingDetail::create([
-            'fk_booking_id' => $booking->id,
-            'play_date' => Carbon::tomorrow()->toDateString(),
-            'start_play_time' => self::TIME_20,
-            'end_play_time' => self::TIME_21,
-            'price' => 100000,
-            'status' => BookingDetailStatus::ACTIVE->value,
-        ]);
-        Payment::create([
-            'fk_booking_id' => $booking->id,
-            'fk_booking_detail_id' => $detail->id,
-            'reference_id' => 'DP-06-1',
-            'payment_type' => PaymentType::DOWN_PAYMENT->value,
-            'method' => 'cash',
-            'amount' => 50000,
-            'status' => PaymentStatus::SUCCESS->value,
-            'paid_at' => now(),
-        ]);
+        [$booking, $detail] = $this->createAssignedBookingWithDetail(
+            'Pelunasan FC',
+            Carbon::tomorrow()->toDateString(),
+            self::TIME_20,
+            self::TIME_21
+        );
+        $this->createDownPayment($booking, $detail, 'DP-06-1');
 
         // 1. Cek detail sebelum pelunasan -> sisa tagihan 50.000 (menampilkan tombol pelunasan)
         $detailBefore = $this->actingAs($this->admin, 'sanctum')
@@ -743,30 +758,13 @@ class AdminRequirementTest extends TestCase
      */
     public function test_tc_adm_06_2_proses_pelunasan_dibatalkan_saat_batal(): void
     {
-        $booking = Booking::create([
-            'fk_user_id' => $this->tenant->id,
-            'fk_field_id' => $this->assignedField->id,
-            'team_name' => 'Batal Lunas FC',
-            'booking_date' => now()->toDateString(),
-        ]);
-        $detail = BookingDetail::create([
-            'fk_booking_id' => $booking->id,
-            'play_date' => Carbon::tomorrow()->toDateString(),
-            'start_play_time' => self::TIME_20,
-            'end_play_time' => self::TIME_21,
-            'price' => 100000,
-            'status' => BookingDetailStatus::ACTIVE->value,
-        ]);
-        Payment::create([
-            'fk_booking_id' => $booking->id,
-            'fk_booking_detail_id' => $detail->id,
-            'reference_id' => 'DP-06-2',
-            'payment_type' => PaymentType::DOWN_PAYMENT->value,
-            'method' => 'cash',
-            'amount' => 50000,
-            'status' => PaymentStatus::SUCCESS->value,
-            'paid_at' => now(),
-        ]);
+        [$booking, $detail] = $this->createAssignedBookingWithDetail(
+            'Batal Lunas FC',
+            Carbon::tomorrow()->toDateString(),
+            self::TIME_20,
+            self::TIME_21
+        );
+        $this->createDownPayment($booking, $detail, 'DP-06-2');
 
         // Tombol Batal ditekan -> tidak ada request pelunasan
         $detailAfter = $this->actingAs($this->admin, 'sanctum')
@@ -781,20 +779,13 @@ class AdminRequirementTest extends TestCase
      */
     public function test_tc_adm_06_3_pelunasan_ditolak_saat_transaksi_dp_sudah_dibatalkan(): void
     {
-        $booking = Booking::create([
-            'fk_user_id' => $this->tenant->id,
-            'fk_field_id' => $this->assignedField->id,
-            'team_name' => 'Cancelled DP FC',
-            'booking_date' => now()->toDateString(),
-        ]);
-        $detail = BookingDetail::create([
-            'fk_booking_id' => $booking->id,
-            'play_date' => Carbon::tomorrow()->toDateString(),
-            'start_play_time' => self::TIME_20,
-            'end_play_time' => self::TIME_21,
-            'price' => 100000,
-            'status' => BookingDetailStatus::CANCELLED->value,
-        ]);
+        [$booking, $detail] = $this->createAssignedBookingWithDetail(
+            'Cancelled DP FC',
+            Carbon::tomorrow()->toDateString(),
+            self::TIME_20,
+            self::TIME_21,
+            BookingDetailStatus::CANCELLED->value
+        );
 
         $response = $this->actingAs($this->admin, 'sanctum')
             ->postJson(self::ENDPOINT_PAYMENT_BOOKING, [
@@ -1145,20 +1136,12 @@ class AdminRequirementTest extends TestCase
         Notification::fake();
 
         $targetDate = Carbon::tomorrow()->toDateString();
-        $booking = Booking::create([
-            'fk_user_id' => $this->tenant->id,
-            'fk_field_id' => $this->assignedField->id,
-            'team_name' => 'Terdampak FC',
-            'booking_date' => now()->toDateString(),
-        ]);
-        $detail = BookingDetail::create([
-            'fk_booking_id' => $booking->id,
-            'play_date' => $targetDate,
-            'start_play_time' => self::TIME_09,
-            'end_play_time' => self::TIME_10,
-            'price' => 100000,
-            'status' => BookingDetailStatus::ACTIVE->value,
-        ]);
+        [, $detail] = $this->createAssignedBookingWithDetail(
+            'Terdampak FC',
+            $targetDate,
+            self::TIME_09,
+            self::TIME_10
+        );
 
         $response = $this->actingAs($this->admin, 'sanctum')
             ->postJson(self::ENDPOINT_CLOSE_FIELD, [

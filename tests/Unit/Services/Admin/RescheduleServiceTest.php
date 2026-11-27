@@ -34,7 +34,7 @@ class RescheduleServiceTest extends TestCase
         $this->service = new RescheduleService();
     }
 
-    public function test_execute(): void
+    private function createRescheduleFixture(string $teamName, ?string $customerPhone = null): array
     {
         Notification::fake();
 
@@ -42,14 +42,17 @@ class RescheduleServiceTest extends TestCase
         $admin = User::factory()->create(['role' => 'worker']);
         $field = Field::factory()->create();
 
-        $booking = Booking::create([
+        $bookingData = [
             'fk_user_id' => $tenant->id,
             'fk_field_id' => $field->id,
-            'team_name' => 'Garuda FC',
-            'customer_phone' => '081234567890',
-            'customer_email' => $tenant->email,
+            'team_name' => $teamName,
             'booking_date' => now()->toDateString(),
-        ]);
+        ];
+        if ($customerPhone !== null) {
+            $bookingData['customer_phone'] = $customerPhone;
+            $bookingData['customer_email'] = $tenant->email;
+        }
+        $booking = Booking::create($bookingData);
 
         $detail = BookingDetail::create([
             'fk_booking_id' => $booking->id,
@@ -59,6 +62,23 @@ class RescheduleServiceTest extends TestCase
             'price' => 100000,
             'status' => BookingDetailStatus::ACTIVE->value,
         ]);
+
+        return [$tenant, $admin, $field, $booking, $detail];
+    }
+
+    private function assertThrowsNoPendingReschedule(callable $action): void
+    {
+        try {
+            $action();
+            $this->fail('Expected DomainException was not thrown');
+        } catch (DomainException $e) {
+            $this->assertSame('Tidak ada pengajuan reschedule yang menunggu persetujuan.', $e->getMessage());
+        }
+    }
+
+    public function test_execute(): void
+    {
+        [$tenant, $admin, , $booking, $detail] = $this->createRescheduleFixture('Garuda FC', '081234567890');
 
         $data = [
             'new_price' => 150000,
@@ -110,35 +130,10 @@ class RescheduleServiceTest extends TestCase
 
     public function test_approve(): void
     {
-        Notification::fake();
-
-        $tenant = User::factory()->create(['role' => 'tenant']);
-        $admin = User::factory()->create(['role' => 'worker']);
-        $field = Field::factory()->create();
-
-        $booking = Booking::create([
-            'fk_user_id' => $tenant->id,
-            'fk_field_id' => $field->id,
-            'team_name' => 'Elang FC',
-            'booking_date' => now()->toDateString(),
-        ]);
-
-        $detail = BookingDetail::create([
-            'fk_booking_id' => $booking->id,
-            'play_date' => self::DATE_NOV_01,
-            'start_play_time' => self::TIME_10,
-            'end_play_time' => self::TIME_11,
-            'price' => 100000,
-            'status' => BookingDetailStatus::ACTIVE->value,
-        ]);
+        [$tenant, $admin, $field, , $detail] = $this->createRescheduleFixture('Elang FC');
 
         // Case 1: Exception when no pending reschedule exists
-        try {
-            $this->service->approve($detail, $admin);
-            $this->fail('Expected DomainException was not thrown');
-        } catch (DomainException $e) {
-            $this->assertSame('Tidak ada pengajuan reschedule yang menunggu persetujuan.', $e->getMessage());
-        }
+        $this->assertThrowsNoPendingReschedule(fn () => $this->service->approve($detail, $admin));
 
         $reschedule = BookingReschedule::create([
             'fk_booking_detail_id' => $detail->id,
@@ -200,35 +195,10 @@ class RescheduleServiceTest extends TestCase
 
     public function test_reject(): void
     {
-        Notification::fake();
-
-        $tenant = User::factory()->create(['role' => 'tenant']);
-        $admin = User::factory()->create(['role' => 'worker']);
-        $field = Field::factory()->create();
-
-        $booking = Booking::create([
-            'fk_user_id' => $tenant->id,
-            'fk_field_id' => $field->id,
-            'team_name' => 'Rajawali FC',
-            'booking_date' => now()->toDateString(),
-        ]);
-
-        $detail = BookingDetail::create([
-            'fk_booking_id' => $booking->id,
-            'play_date' => self::DATE_NOV_01,
-            'start_play_time' => self::TIME_10,
-            'end_play_time' => self::TIME_11,
-            'price' => 100000,
-            'status' => BookingDetailStatus::ACTIVE->value,
-        ]);
+        [$tenant, $admin, , , $detail] = $this->createRescheduleFixture('Rajawali FC');
 
         // Case 1: Exception when no pending reschedule exists
-        try {
-            $this->service->reject($detail, 'Ditolak karena penuh', $admin);
-            $this->fail('Expected DomainException was not thrown');
-        } catch (DomainException $e) {
-            $this->assertSame('Tidak ada pengajuan reschedule yang menunggu persetujuan.', $e->getMessage());
-        }
+        $this->assertThrowsNoPendingReschedule(fn () => $this->service->reject($detail, 'Ditolak karena penuh', $admin));
 
         $reschedule = BookingReschedule::create([
             'fk_booking_detail_id' => $detail->id,
