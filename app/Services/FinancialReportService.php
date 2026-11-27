@@ -2,11 +2,11 @@
 
 namespace App\Services;
 
-use App\Models\Payment;
-use App\Models\Expense;
-use App\Models\BookingAttribute;
 use App\Enums\PaymentStatus;
 use App\Enums\PaymentType;
+use App\Models\BookingAttribute;
+use App\Models\Expense;
+use App\Models\Payment;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Schema;
 
@@ -25,9 +25,9 @@ class FinancialReportService
 
         $paymentQuery = Payment::query()
             ->where('status', PaymentStatus::SUCCESS->value)
-            ->whereBetween($paymentDateCol, [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+            ->whereBetween($paymentDateCol, [$startDate.' 00:00:00', $endDate.' 23:59:59']);
 
-        if (!empty($fieldIds)) {
+        if (! empty($fieldIds)) {
             $paymentQuery->whereHas('booking', function ($query) use ($fieldIds) {
                 $query->whereIn('fk_field_id', $fieldIds);
             });
@@ -56,11 +56,12 @@ class FinancialReportService
         $totalRefund = $payments->where('payment_type', PaymentType::REFUND->value)->sum('amount');
 
         $attributeQuery = BookingAttribute::query()
+            ->with(['bookingDetail.booking.field'])
             ->whereBetween($attributeDateCol, [$startDate, $endDate])
             ->whereNotIn('status', ['cancelled', 'batal', 'rejected']);
 
-        if (!empty($fieldIds)) {
-            $attributeQuery->whereHas('booking', function ($query) use ($fieldIds) {
+        if (! empty($fieldIds)) {
+            $attributeQuery->whereHas('bookingDetail.booking', function ($query) use ($fieldIds) {
                 $query->whereIn('fk_field_id', $fieldIds);
             });
         }
@@ -79,7 +80,7 @@ class FinancialReportService
         $expenseQuery = Expense::query()
             ->whereBetween($expenseDateCol, [$startDate, $endDate]);
 
-        if (!empty($fieldIds)) {
+        if (! empty($fieldIds)) {
             $expenseQuery->whereIn('fk_field_id', $fieldIds);
         }
 
@@ -145,9 +146,9 @@ class FinancialReportService
                 }
 
                 $list[] = [
-                    'id' => 'PAY-' . $payment->id,
+                    'id' => 'PAY-'.$payment->id,
                     'title' => $isRefund ? 'Pengembalian Dana (Refund)' : 'Pembayaran Sewa Lapangan',
-                    'description' => 'Ref: ' . ($payment->reference_id ?? '-'),
+                    'description' => 'Ref: '.($payment->reference_id ?? '-'),
                     'amount' => (int) $payment->amount,
                     'type' => $isRefund ? 'refund' : 'income',
                     'date' => Carbon::parse($payment->{$pCol})->format('Y-m-d H:i'),
@@ -159,13 +160,13 @@ class FinancialReportService
         if (in_array($reportType, ['all', 'income', 'field'], true)) {
             foreach ($attributes as $attribute) {
                 $list[] = [
-                    'id' => 'ATTR-' . $attribute->id,
-                    'title' => 'Sewa Atribut: ' . ($attribute->customer_name ?? 'Pelanggan'),
-                    'description' => 'Jumlah: ' . $attribute->quantity . ' pcs (' . ucfirst($attribute->status) . ')',
+                    'id' => 'ATTR-'.$attribute->id,
+                    'title' => 'Sewa Atribut: '.($attribute->customer_name ?? 'Pelanggan'),
+                    'description' => 'Jumlah: '.$attribute->quantity.' pcs ('.ucfirst($attribute->status).')',
                     'amount' => (int) $attribute->total,
                     'type' => 'income',
                     'date' => Carbon::parse($attribute->{$aCol})->format('Y-m-d'),
-                    'field_name' => $attribute->booking?->field?->name ?? null,
+                    'field_name' => $attribute->bookingDetail?->booking?->field?->name ?? null,
                 ];
             }
         }
@@ -173,8 +174,8 @@ class FinancialReportService
         if (in_array($reportType, ['all', 'expense', 'field'], true)) {
             foreach ($expenses as $expense) {
                 $list[] = [
-                    'id' => 'EXP-' . $expense->id,
-                    'title' => 'Pengeluaran: ' . ($expense->category ?? 'Operasional'),
+                    'id' => 'EXP-'.$expense->id,
+                    'title' => 'Pengeluaran: '.($expense->category ?? 'Operasional'),
                     'description' => $expense->note ?? $expense->description ?? '-',
                     'amount' => (int) $expense->amount,
                     'type' => 'expense',

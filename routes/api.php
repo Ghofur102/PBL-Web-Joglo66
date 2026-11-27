@@ -1,25 +1,25 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Admin\DashboardController;
-use App\Http\Controllers\Admin\FieldController;
-use App\Http\Controllers\Admin\BookingController;
-use App\Http\Controllers\Admin\RescheduleController;
-use App\Http\Controllers\Admin\CancelController;
-use App\Http\Controllers\Admin\ClosedBookingsController;
-use App\Http\Controllers\Admin\RefundOverpaymentController;
-use App\Http\Controllers\Admin\PaymentController;
-use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\NotificationController;
-use App\Http\Controllers\Tenant\Payment\DuitkuController;
 use App\Http\Controllers\Admin\AttributeController;
 use App\Http\Controllers\Admin\AttributeRentalController;
+use App\Http\Controllers\Admin\BookingController;
+use App\Http\Controllers\Admin\CancelController;
+use App\Http\Controllers\Admin\ClosedBookingsController;
+use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\ExpenseController;
-use App\Http\Controllers\ReportController;
-use App\Http\Controllers\Treasure\SalaryController;
+use App\Http\Controllers\Admin\FieldController;
+use App\Http\Controllers\Admin\PaymentController;
+use App\Http\Controllers\Admin\RefundOverpaymentController;
+use App\Http\Controllers\Admin\RescheduleController;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Owner\DownloadReportController;
 use App\Http\Controllers\Owner\EmployeeController;
 use App\Http\Controllers\Owner\OwnerFieldController;
-use App\Http\Controllers\Owner\DownloadReportController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\Tenant\Payment\DuitkuController;
+use App\Http\Controllers\Treasure\SalaryController;
+use Illuminate\Support\Facades\Route;
 
 if (!defined('ROUTE_LOGOUT')) {
     define('ROUTE_LOGOUT', '/logout');
@@ -31,10 +31,10 @@ Route::get('/hello', function () {
     return response()->json(['message' => 'Hello from Laravel!']);
 });
 
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:6,1');
 
 Route::prefix('admin')->middleware(['auth:sanctum', 'check.field.admin'])->group(function () {
-    Route::post(ROUTE_LOGOUT, [AuthController::class, 'logout']);
+    Route::post(AuthController::LOGOUT_ROUTE, [AuthController::class, 'logout']);
 
     Route::get('/dashboard', [DashboardController::class, 'dashboard']);
     Route::get('/profile', [AuthController::class, 'profile']);
@@ -93,7 +93,7 @@ Route::prefix('treasurer')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/gaji', [SalaryController::class, 'index']);
     Route::post('/gaji/update', [SalaryController::class, 'update']);
     Route::post('/gaji/sync', [SalaryController::class, 'sync']);
-    Route::post(ROUTE_LOGOUT, [AuthController::class, 'logout']);
+    Route::post(AuthController::LOGOUT_ROUTE, [AuthController::class, 'logout']);
 });
 
 Route::prefix('owner')->middleware(['auth:sanctum'])->group(function () {
@@ -112,7 +112,7 @@ Route::prefix('owner')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/fields/{id}/update', [OwnerFieldController::class, 'update']);
 
     Route::get('/laporan-pdf/preview', [DownloadReportController::class, 'preview']);
-    Route::post(ROUTE_LOGOUT, [AuthController::class, 'logout']);
+    Route::post(AuthController::LOGOUT_ROUTE, [AuthController::class, 'logout']);
 });
 
 Route::get('/laporan-bulanan', [ReportController::class, 'index'])->middleware('auth:sanctum');
