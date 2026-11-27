@@ -18,98 +18,143 @@ use Illuminate\Support\Str;
 
 class RescheduleService
 {
+    private const NO_PENDING_RESCHEDULE = 'Tidak ada pengajuan reschedule yang menunggu persetujuan.';
+
     public function execute(BookingDetail $detail, array $data, User $actor): void
     {
         $fieldId = (int) $detail->booking->fk_field_id;
 
         $this->withSlotLock($fieldId, $data['new_play_date'], $data['new_start_time'], function () use ($detail, $data, $actor, $fieldId) {
-            DB::transaction(function () use ($detail, $data, $actor, $fieldId) {
-                if ($this->hasSlotConflict(
-                    $fieldId,
-                    $detail->id,
-                    $data['new_play_date'],
-                    $data['new_start_time'],
-                    $data['new_end_time']
-                )) {
-                    throw new DomainException('Slot jadwal yang diajukan telah diambil oleh pemesanan lain.');
-                }
-
-                $oldPrice = (int) $detail->price;
-                $newPrice = (int) $data['new_price'];
-
-                if ($newPrice > $oldPrice) {
-                    $statusRefund = 'deposit required';
-                } elseif ($newPrice < $oldPrice) {
-                    $statusRefund = 'refund required';
-                } else {
-                    $statusRefund = 'none';
-                }
-
-                BookingReschedule::create([
-                    'fk_booking_detail_id' => $detail->id,
-                    'old_date' => $detail->play_date,
-                    'new_play_date' => $data['new_play_date'],
-                    'new_start_play_time' => $data['new_start_time'],
-                    'new_end_play_time' => $data['new_end_time'],
-                    'new_price' => $newPrice,
-                    'reason' => $data['reason'],
-                    'status_refund' => $statusRefund,
-                    'approval_status' => 'approved',
-                    'sender_by' => 'admin',
-                ]);
-
-                $detail->update([
-                    'play_date' => $data['new_play_date'],
-                    'start_play_time' => $data['new_start_time'],
-                    'end_play_time' => $data['new_end_time'],
-                    'price' => $data['new_price'],
-                    'status' => BookingDetailStatus::RESCHEDULE->value,
-                ]);
-
-                if ($newPrice < $oldPrice) {
-                    $refundAmount = (int) round(($oldPrice - $newPrice) * ((float) ($data['refund_percent'] ?? 0) / 100));
-                    if ($refundAmount > 0) {
-                        Payment::create([
-                            'fk_booking_id' => $detail->fk_booking_id,
-                            'fk_booking_detail_id' => $detail->id,
-                            'reference_id' => 'RSC-REF-'.strtoupper(Str::random(10)),
-                            'payment_type' => PaymentType::REFUND->value,
-                            'method' => 'cash',
-                            'amount' => $refundAmount,
-                            'status' => PaymentStatus::SUCCESS->value,
-                            'paid_at' => now(),
-                        ]);
-                    }
-                }
-
-                if (($data['financial_action'] ?? '') === 'Lunas' && ($data['reconciled_amount'] ?? 0) > 0) {
-                    Payment::create([
-                        'fk_booking_id' => $detail->fk_booking_id,
-                        'fk_booking_detail_id' => $detail->id,
-                        'reference_id' => 'RSC-'.strtoupper(Str::random(10)),
-                        'payment_type' => PaymentType::FINAL_PAYMENT->value,
-                        'method' => 'cash',
-                        'amount' => $data['reconciled_amount'],
-                        'status' => PaymentStatus::SUCCESS->value,
-                        'paid_at' => now(),
-                    ]);
-                }
-
-                $tenant = $detail->booking->user;
-                if ($tenant) {
-                    $tenant->notify(new GeneralBookingNotification([
-                        'title' => 'Jadwal Bermain Telah Diubah',
-                        'message' => "Jadwal sewa pada booking #{$detail->fk_booking_id} telah disesuaikan oleh pengelola ke tanggal {$data['new_play_date']}.",
-                        'type' => 'reschedule_by_admin',
-                        'booking_id' => $detail->fk_booking_id,
-                        'url' => route('tenant.booking.history.show', $detail->fk_booking_id),
-                        'sender_id' => $actor->id,
-                        'sender_name' => $actor->name,
-                        'sender_role' => $actor->role,
-                    ]));
-                }
-            });
+            DB::transaction(fn () => $this->executeTransaction($detail, $data, $actor, $fieldId));
         });
+    }
+
+    private function executeTransaction(BookingDetail $detail, array $data, User $actor, int $fieldId): void
+    {
+        $this->assertNoSlotConflict($detail, $data, $fieldId);
+
+        $oldPrice = (int) $detail->price;
+        $newPrice = (int) $data['new_price'];
+        $statusRefund = $this->resolveRefundStatus($oldPrice, $newPrice);
+
+        $this->createRescheduleRecord($detail, $data, $newPrice, $statusRefund);
+        $this->updateRescheduledDetail($detail, $data);
+        $this->createRefundPayment($detail, $data, $oldPrice, $newPrice);
+        $this->createFinalPayment($detail, $data);
+        $this->notifyRescheduledTenant($detail, $data, $actor);
+    }
+
+    private function assertNoSlotConflict(BookingDetail $detail, array $data, int $fieldId): void
+    {
+        $hasConflict = $this->hasSlotConflict(
+            $fieldId,
+            $detail->id,
+            $data['new_play_date'],
+            $data['new_start_time'],
+            $data['new_end_time']
+        );
+
+        if ($hasConflict) {
+            throw new DomainException('Slot jadwal yang diajukan telah diambil oleh pemesanan lain.');
+        }
+    }
+
+    private function resolveRefundStatus(int $oldPrice, int $newPrice): string
+    {
+        if ($newPrice > $oldPrice) {
+            return 'deposit required';
+        }
+
+        return $newPrice < $oldPrice ? 'refund required' : 'none';
+    }
+
+    private function createRescheduleRecord(BookingDetail $detail, array $data, int $newPrice, string $statusRefund): void
+    {
+        BookingReschedule::create([
+            'fk_booking_detail_id' => $detail->id,
+            'old_date' => $detail->play_date,
+            'new_play_date' => $data['new_play_date'],
+            'new_start_play_time' => $data['new_start_time'],
+            'new_end_play_time' => $data['new_end_time'],
+            'new_price' => $newPrice,
+            'reason' => $data['reason'],
+            'status_refund' => $statusRefund,
+            'approval_status' => 'approved',
+            'sender_by' => 'admin',
+        ]);
+    }
+
+    private function updateRescheduledDetail(BookingDetail $detail, array $data): void
+    {
+        $detail->update([
+            'play_date' => $data['new_play_date'],
+            'start_play_time' => $data['new_start_time'],
+            'end_play_time' => $data['new_end_time'],
+            'price' => $data['new_price'],
+            'status' => BookingDetailStatus::RESCHEDULE->value,
+        ]);
+    }
+
+    private function createRefundPayment(BookingDetail $detail, array $data, int $oldPrice, int $newPrice): void
+    {
+        if ($newPrice >= $oldPrice) {
+            return;
+        }
+
+        $refundAmount = (int) round(($oldPrice - $newPrice) * ((float) ($data['refund_percent'] ?? 0) / 100));
+        if ($refundAmount <= 0) {
+            return;
+        }
+
+        Payment::create([
+            'fk_booking_id' => $detail->fk_booking_id,
+            'fk_booking_detail_id' => $detail->id,
+            'reference_id' => 'RSC-REF-'.strtoupper(Str::random(10)),
+            'payment_type' => PaymentType::REFUND->value,
+            'method' => 'cash',
+            'amount' => $refundAmount,
+            'status' => PaymentStatus::SUCCESS->value,
+            'paid_at' => now(),
+        ]);
+    }
+
+    private function createFinalPayment(BookingDetail $detail, array $data): void
+    {
+        $isLunas = ($data['financial_action'] ?? '') === 'Lunas';
+        $reconciledAmount = (int) ($data['reconciled_amount'] ?? 0);
+        if (! $isLunas || $reconciledAmount <= 0) {
+            return;
+        }
+
+        Payment::create([
+            'fk_booking_id' => $detail->fk_booking_id,
+            'fk_booking_detail_id' => $detail->id,
+            'reference_id' => 'RSC-'.strtoupper(Str::random(10)),
+            'payment_type' => PaymentType::FINAL_PAYMENT->value,
+            'method' => 'cash',
+            'amount' => $reconciledAmount,
+            'status' => PaymentStatus::SUCCESS->value,
+            'paid_at' => now(),
+        ]);
+    }
+
+    private function notifyRescheduledTenant(BookingDetail $detail, array $data, User $actor): void
+    {
+        $tenant = $detail->booking->user;
+        if (! $tenant) {
+            return;
+        }
+
+        $tenant->notify(new GeneralBookingNotification([
+            'title' => 'Jadwal Bermain Telah Diubah',
+            'message' => "Jadwal sewa pada booking #{$detail->fk_booking_id} telah disesuaikan oleh pengelola ke tanggal {$data['new_play_date']}.",
+            'type' => 'reschedule_by_admin',
+            'booking_id' => $detail->fk_booking_id,
+            'url' => route('tenant.booking.history.show', $detail->fk_booking_id),
+            'sender_id' => $actor->id,
+            'sender_name' => $actor->name,
+            'sender_role' => $actor->role,
+        ]));
     }
 
     public function approve(BookingDetail $detail, User $actor): void
@@ -120,7 +165,7 @@ class RescheduleService
             ->first();
 
         if (! $reschedule) {
-            throw new DomainException('Tidak ada pengajuan reschedule yang menunggu persetujuan.');
+            throw new DomainException(self::NO_PENDING_RESCHEDULE);
         }
 
         $fieldId = (int) $detail->booking->fk_field_id;
@@ -133,7 +178,7 @@ class RescheduleService
                     ->first();
 
                 if (! $reschedule) {
-                    throw new DomainException('Tidak ada pengajuan reschedule yang menunggu persetujuan.');
+                    throw new DomainException(self::NO_PENDING_RESCHEDULE);
                 }
 
                 if ($this->hasSlotConflict(
@@ -231,7 +276,7 @@ class RescheduleService
                 ->first();
 
             if (! $reschedule) {
-                throw new DomainException('Tidak ada pengajuan reschedule yang menunggu persetujuan.');
+                throw new DomainException(self::NO_PENDING_RESCHEDULE);
             }
 
             $reschedule->update([

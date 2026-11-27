@@ -17,6 +17,8 @@ use Tests\TestCase;
 #[RunTestsInSeparateProcesses]
 class SalaryServiceTest extends TestCase
 {
+    private const DATE_20260101 = '2026-01-01';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -119,8 +121,8 @@ class SalaryServiceTest extends TestCase
             'category' => 'Gaji',
             'quantity' => 1,
             'unit_price' => 400000,
-            'expense_date' => '2026-01-01',
-            'generate_at' => '2026-01-01',
+            'expense_date' => self::DATE_20260101,
+            'generate_at' => self::DATE_20260101,
         ]);
         $expense = Expense::first();
         $salary = EmployeeSalary::create([
@@ -129,7 +131,7 @@ class SalaryServiceTest extends TestCase
             'amount_paid' => 400000,
             'period_month' => 'january',
             'period_year' => 2026,
-            'payment_date' => '2026-01-01',
+            'payment_date' => self::DATE_20260101,
             'bonus' => 0,
             'deduction' => 0,
             'notes' => '-',
@@ -182,7 +184,7 @@ class SalaryServiceTest extends TestCase
             'name' => $name,
             'position' => 'Worker',
             'base_salary' => $salary,
-            'join_date' => '2026-01-01',
+            'join_date' => self::DATE_20260101,
             'status' => $status,
         ]);
     }

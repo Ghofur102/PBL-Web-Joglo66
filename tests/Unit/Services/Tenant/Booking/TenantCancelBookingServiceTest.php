@@ -25,6 +25,9 @@ use Tests\TestCase;
 #[RunTestsInSeparateProcesses]
 class TenantCancelBookingServiceTest extends TestCase
 {
+    private const DATE_20261101 = '2026-11-01';
+    private const TEAM_NAME = 'Joglo team';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -117,7 +120,7 @@ class TenantCancelBookingServiceTest extends TestCase
     public function test_get_cancellation_data(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-10-25 10:00:00'));
-        $detail = $this->createBookingDetail('active', '2026-11-01');
+        $detail = $this->createBookingDetail('active', self::DATE_20261101);
         Payment::create([
             'fk_booking_id' => $detail->fk_booking_id,
             'payment_type' => PaymentType::DOWN_PAYMENT->value,
@@ -152,7 +155,7 @@ class TenantCancelBookingServiceTest extends TestCase
     {
         Carbon::setTestNow(Carbon::parse('2026-10-25 10:00:00'));
         $tenant = User::create(['name' => 'Tenant', 'email' => 'tenant@example.com', 'password' => 'secret']);
-        $detail = $this->createBookingDetail('active', '2026-11-01', $tenant->id);
+        $detail = $this->createBookingDetail('active', self::DATE_20261101, $tenant->id);
         Auth::login($tenant);
         $refundRules = \Mockery::mock(RefundRuleService::class);
         $refundRules->shouldReceive('getPolicy')->twice()->andReturn([
@@ -174,10 +177,10 @@ class TenantCancelBookingServiceTest extends TestCase
 
     public function test_get_policy(): void
     {
-        $detail = $this->createBookingDetail('active', '2026-11-01');
+        $detail = $this->createBookingDetail('active', self::DATE_20261101);
         $refundRules = \Mockery::mock(RefundRuleService::class);
         $refundRules->shouldReceive('getPolicy')->once()->withArgs(
-            fn (int $fieldId, string $type, Carbon $playAt): bool => $fieldId === 1 && $type === 'cancel' && $playAt->toDateString() === '2026-11-01'
+            fn (int $fieldId, string $type, Carbon $playAt): bool => $fieldId === 1 && $type === 'cancel' && $playAt->toDateString() === self::DATE_20261101
         )->andReturn(['terms' => [], 'deadline' => null, 'currentPercent' => null, 'isWithinWindow' => false]);
         $method = new ReflectionMethod(TenantCancelBookingService::class, 'getPolicy');
 
@@ -189,7 +192,7 @@ class TenantCancelBookingServiceTest extends TestCase
 
     public function test_calculate_payment_totals(): void
     {
-        $detail = $this->createBookingDetail('active', '2026-11-01');
+        $detail = $this->createBookingDetail('active', self::DATE_20261101);
         Payment::create([
             'fk_booking_id' => $detail->fk_booking_id,
             'payment_type' => PaymentType::DOWN_PAYMENT->value,

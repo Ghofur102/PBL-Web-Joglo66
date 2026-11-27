@@ -22,6 +22,12 @@ use UnexpectedValueException;
 #[RunTestsInSeparateProcesses]
 class TenantBookingServiceTest extends TestCase
 {
+    private const TEAM_NAME = 'Joglo team';
+    private const TENANT_EMAIL = 'tenant@example.com';
+    private const TIME_080000 = '08:00:00';
+    private const TIME_090000 = '09:00:00';
+    private const TIME_0900 = '09:00';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -96,14 +102,14 @@ class TenantBookingServiceTest extends TestCase
         FieldPrice::create([
             'fk_field_id' => 1,
             'day_type' => 'monday',
-            'start_time' => '08:00:00',
+            'start_time' => self::TIME_080000,
             'end_time' => '10:00:00',
             'price' => 150000,
         ]);
 
         $result = (new TenantBookingService)->calculateAndGroupSlots(1, [
-            ['date' => '2026-10-26', 'jam' => '08:00', 'jam_akhir' => '09:00'],
-            ['date' => '2026-10-26', 'jam' => '09:00', 'jam_akhir' => '10:00'],
+            ['date' => '2026-10-26', 'jam' => '08:00', 'jam_akhir' => self::TIME_0900],
+            ['date' => '2026-10-26', 'jam' => self::TIME_0900, 'jam_akhir' => '10:00'],
         ]);
 
         $this->assertSame(300000, $result['totalPrice']);
@@ -117,22 +123,22 @@ class TenantBookingServiceTest extends TestCase
         $duitku = \Mockery::mock(DuitkuService::class);
         $duitku->shouldReceive('createInvoice')
             ->once()
-            ->withArgs(fn (Booking $booking, float|int $amount): bool => $booking->team_name === 'Joglo team' && $amount === 100000)
+            ->withArgs(fn (Booking $booking, float|int $amount): bool => $booking->team_name === self::TEAM_NAME && $amount === 100000)
             ->andReturn((object) ['reference' => 'INV-1', 'paymentUrl' => 'https://payment.test']);
 
         $result = $service->processBookingTransaction(
             7,
-            (object) ['phone_number' => '0812345678', 'email' => 'tenant@example.com'],
+            (object) ['phone_number' => '0812345678', 'email' => self::TENANT_EMAIL],
             [
                 'field_id' => 1,
-                'team_name' => 'Joglo team',
+                'team_name' => self::TEAM_NAME,
                 'payment_type' => PaymentType::FINAL_PAYMENT->value,
             ],
-            ['2026-10-26' => [['jam' => '08:00', 'jam_akhir' => '09:00', 'harga' => 100000]]],
+            ['2026-10-26' => [['jam' => '08:00', 'jam_akhir' => self::TIME_0900, 'harga' => 100000]]],
             $duitku
         );
 
-        $this->assertSame('Joglo team', $result['booking']->team_name);
+        $this->assertSame(self::TEAM_NAME, $result['booking']->team_name);
         $this->assertSame(1, BookingDetail::count());
         $this->assertSame(100000, Payment::first()->amount);
         $this->assertSame(PaymentStatus::PENDING->value, Payment::first()->status);
@@ -159,7 +165,7 @@ class TenantBookingServiceTest extends TestCase
         $method = new ReflectionMethod(TenantBookingService::class, 'validateSlotsAvailability');
 
         $method->invoke(new TenantBookingService, 1, [
-            '2026-10-26' => [['jam' => '08:00:00', 'jam_akhir' => '09:00:00']],
+            '2026-10-26' => [['jam' => self::TIME_080000, 'jam_akhir' => self::TIME_090000]],
         ]);
 
         $this->assertTrue(true);
@@ -176,8 +182,8 @@ class TenantBookingServiceTest extends TestCase
         BookingDetail::create([
             'fk_booking_id' => $booking->id,
             'play_date' => '2026-10-26',
-            'start_play_time' => '08:00:00',
-            'end_play_time' => '09:00:00',
+            'start_play_time' => self::TIME_080000,
+            'end_play_time' => self::TIME_090000,
             'price' => 100000,
             'status' => BookingDetailStatus::WAITING->value,
         ]);
@@ -201,8 +207,8 @@ class TenantBookingServiceTest extends TestCase
 
         $this->expectException(UnexpectedValueException::class);
         $method->invoke(new TenantBookingService, 1, '2026-10-26', [
-            'jam' => '08:00:00',
-            'jam_akhir' => '09:00:00',
+            'jam' => self::TIME_080000,
+            'jam_akhir' => self::TIME_090000,
         ]);
     }
 }

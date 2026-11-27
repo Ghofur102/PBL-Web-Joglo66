@@ -12,6 +12,8 @@ use Throwable;
 
 class AuthController extends Controller
 {
+    public const LOGOUT_ROUTE = '/logout';
+
     protected AuthService $authService;
 
     public function __construct(AuthService $authService)

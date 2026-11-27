@@ -14,24 +14,17 @@ class CheckFieldAdmin
         $user = $request->user();
 
         if (! $user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthenticated.',
-            ], 401);
+            return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
         }
 
-        if (in_array($user->role, ['admin', 'manager', 'owner'], true)) {
+        $isFullAccessRole = in_array($user->role, ['admin', 'manager', 'owner'], true);
+        $isFieldRole = in_array($user->role, ['worker', 'treasurer'], true);
+        $hasAssignedField = $isFieldRole && DB::table('field_workers')
+            ->where('fk_user_id', $user->id)
+            ->exists();
+
+        if ($isFullAccessRole || $hasAssignedField) {
             return $next($request);
-        }
-
-        if (in_array($user->role, ['worker', 'treasurer'], true)) {
-            $hasField = DB::table('field_workers')
-                ->where('fk_user_id', $user->id)
-                ->exists();
-
-            if ($hasField) {
-                return $next($request);
-            }
         }
 
         return response()->json([

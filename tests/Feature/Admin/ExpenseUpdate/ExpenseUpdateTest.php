@@ -12,6 +12,10 @@ use Tests\TestCase;
 class ExpenseUpdateTest extends TestCase
 {
     private const CONNECTION = 'mysql_joglo66_app';
+    private const EXPENSE_DATE = '2026-10-25';
+    private const UPDATE_EXPENSE_PATH = '/api/admin/update-expense/';
+    private const INITIAL_EXPENSE_NAME = 'Pengeluaran awal';
+    private const INITIAL_EXPENSE_NOTE = 'Catatan awal';
 
     protected function setUp(): void
     {   
@@ -64,12 +68,12 @@ class ExpenseUpdateTest extends TestCase
         $expense = $this->createExpense();
 
         $response = $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/update-expense/'.$expense->id, [
+            ->postJson(self::UPDATE_EXPENSE_PATH.$expense->id, [
                 'name' => 'Beli bola',
                 'category' => 'Perlengkapan',
                 'quantity' => 2,
                 'unit_price' => 100000,
-                'date' => '2026-10-25',
+                'date' => self::EXPENSE_DATE,
                 'note' => 'Bola untuk latihan',
             ]);
 
@@ -83,7 +87,7 @@ class ExpenseUpdateTest extends TestCase
             'category' => 'Perlengkapan',
             'quantity' => 2,
             'unit_price' => 100000,
-            'expense_date' => '2026-10-25',
+            'expense_date' => self::EXPENSE_DATE,
             'note' => 'Bola untuk latihan',
         ], self::CONNECTION);
     }
@@ -94,7 +98,7 @@ class ExpenseUpdateTest extends TestCase
         $expense = $this->createExpense();
 
         $response = $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/update-expense/'.$expense->id, [
+            ->postJson(self::UPDATE_EXPENSE_PATH.$expense->id, [
                 ...$this->validPayload(),
                 'unit_price' => -1000,
             ]);
@@ -104,10 +108,10 @@ class ExpenseUpdateTest extends TestCase
 
         $this->assertDatabaseHas('expenses', [
             'id' => $expense->id,
-            'name' => 'Pengeluaran awal',
+            'name' => self::INITIAL_EXPENSE_NAME,
             'quantity' => 1,
             'unit_price' => 100000,
-            'note' => 'Catatan awal',
+            'note' => self::INITIAL_EXPENSE_NOTE,
         ], self::CONNECTION);
     }
 
@@ -117,7 +121,7 @@ class ExpenseUpdateTest extends TestCase
         $expense = $this->createExpense(fieldId: 2);
 
         $response = $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/update-expense/'.$expense->id, [
+            ->postJson(self::UPDATE_EXPENSE_PATH.$expense->id, [
                 ...$this->validPayload(),
                 'name' => 'Tidak boleh berubah',
             ]);
@@ -128,7 +132,7 @@ class ExpenseUpdateTest extends TestCase
         $this->assertDatabaseHas('expenses', [
             'id' => $expense->id,
             'fk_field_id' => 2,
-            'name' => 'Pengeluaran awal',
+            'name' => self::INITIAL_EXPENSE_NAME,
             'unit_price' => 100000,
         ], self::CONNECTION);
     }
@@ -139,7 +143,7 @@ class ExpenseUpdateTest extends TestCase
         $expense = $this->createExpense();
 
         $response = $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/update-expense/'.$expense->id, [
+            ->postJson(self::UPDATE_EXPENSE_PATH.$expense->id, [
                 ...$this->validPayload(),
                 'name' => '<script>alert(1)</script>',
             ]);
@@ -149,8 +153,8 @@ class ExpenseUpdateTest extends TestCase
 
         $this->assertDatabaseHas('expenses', [
             'id' => $expense->id,
-            'name' => 'Pengeluaran awal',
-            'note' => 'Catatan awal',
+            'name' => self::INITIAL_EXPENSE_NAME,
+            'note' => self::INITIAL_EXPENSE_NOTE,
         ], self::CONNECTION);
     }
 
@@ -176,12 +180,12 @@ class ExpenseUpdateTest extends TestCase
         return Expense::create([
             'fk_field_id' => $fieldId,
             'fk_user_id' => 1,
-            'name' => 'Pengeluaran awal',
+            'name' => self::INITIAL_EXPENSE_NAME,
             'category' => 'Operasional',
             'quantity' => 1,
             'unit_price' => 100000,
             'expense_date' => '2026-10-01',
-            'note' => 'Catatan awal',
+            'note' => self::INITIAL_EXPENSE_NOTE,
             'generate_at' => '2026-10-01',
         ]);
     }
@@ -193,7 +197,7 @@ class ExpenseUpdateTest extends TestCase
             'category' => 'Operasional',
             'quantity' => 1,
             'unit_price' => 200000,
-            'date' => '2026-10-25',
+            'date' => self::EXPENSE_DATE,
             'note' => 'Catatan baru',
         ];
     }

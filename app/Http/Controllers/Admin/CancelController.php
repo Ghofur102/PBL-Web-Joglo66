@@ -17,6 +17,8 @@ class CancelController extends Controller
 {
     use FieldAccessTrait;
 
+    private const UNAUTHORIZED_MESSAGE = 'Unauthorized field access.';
+
     protected CancelService $cancelService;
 
     public function __construct(CancelService $cancelService)
@@ -30,7 +32,7 @@ class CancelController extends Controller
             $detail = BookingDetail::query()->findOrFail($detail_booking_id);
 
             if (! $this->checkFieldAccess($request->user(), $detail->booking->fk_field_id)) {
-                throw new HttpException(403, 'Unauthorized field access.');
+                throw new HttpException(403, self::UNAUTHORIZED_MESSAGE);
             }
 
             $this->cancelService->execute($detail, $request->validated(), $request->user());
@@ -60,7 +62,7 @@ class CancelController extends Controller
             $detail = BookingDetail::query()->findOrFail($detail_booking_id);
 
             if (! $this->checkFieldAccess($request->user(), $detail->booking->fk_field_id)) {
-                throw new HttpException(403, 'Unauthorized field access.');
+                throw new HttpException(403, self::UNAUTHORIZED_MESSAGE);
             }
 
             $this->cancelService->approve(
@@ -92,7 +94,7 @@ class CancelController extends Controller
             $detail = BookingDetail::query()->findOrFail($detail_booking_id);
 
             if (! $this->checkFieldAccess($request->user(), $detail->booking->fk_field_id)) {
-                throw new HttpException(403, 'Unauthorized field access.');
+                throw new HttpException(403, self::UNAUTHORIZED_MESSAGE);
             }
 
             $this->cancelService->reject($detail, $request->input('rejection_reason'), $request->user());

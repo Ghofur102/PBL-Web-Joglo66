@@ -15,6 +15,8 @@ class ExpenseController extends Controller
 {
     use FieldAccessTrait;
 
+    private const SCRIPT_VALIDATION_RULE = 'not_regex:/<\s*script\b/i';
+
     protected ExpenseService $expenseService;
 
     public function __construct(ExpenseService $expenseService)
@@ -71,12 +73,12 @@ class ExpenseController extends Controller
     public function addExpense(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'name' => ['required', 'string', 'max:100', 'not_regex:/<\s*script\b/i'],
+            'name' => ['required', 'string', 'max:100', self::SCRIPT_VALIDATION_RULE],
             'category' => 'required|string|max:50',
             'quantity' => 'required|numeric|min:1',
             'unit_price' => 'required|numeric|min:0',
             'date' => 'required|date_format:Y-m-d',
-            'note' => ['nullable', 'string', 'not_regex:/<\s*script\b/i'],
+            'note' => ['nullable', 'string', self::SCRIPT_VALIDATION_RULE],
             'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
@@ -100,12 +102,12 @@ class ExpenseController extends Controller
     public function updateExpense(Request $request, $id): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'name' => ['required', 'string', 'max:100', 'not_regex:/<\s*script\b/i'],
+            'name' => ['required', 'string', 'max:100', self::SCRIPT_VALIDATION_RULE],
             'category' => 'required|string|max:50',
             'quantity' => 'required|numeric|min:1',
             'unit_price' => 'required|numeric|min:0',
             'date' => 'required|date_format:Y-m-d',
-            'note' => ['nullable', 'string', 'not_regex:/<\s*script\b/i'],
+            'note' => ['nullable', 'string', self::SCRIPT_VALIDATION_RULE],
             'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 

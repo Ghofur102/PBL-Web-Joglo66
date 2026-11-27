@@ -15,6 +15,8 @@ use Tests\TestCase;
 #[RunTestsInSeparateProcesses]
 class NotificationServiceTest extends TestCase
 {
+    private const TENANT_EMAIL = 'tenant@example.com';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -47,7 +49,7 @@ class NotificationServiceTest extends TestCase
 
     public function test_get_paginated_notifications(): void
     {
-        $user = User::create(['name' => 'Tenant', 'email' => 'tenant@example.com']);
+        $user = User::create(['name' => 'Tenant', 'email' => self::TENANT_EMAIL]);
         $this->addNotification($user);
         $this->addNotification($user);
 
@@ -60,7 +62,7 @@ class NotificationServiceTest extends TestCase
 
     public function test_get_unread_count(): void
     {
-        $user = User::create(['name' => 'Tenant', 'email' => 'tenant@example.com']);
+        $user = User::create(['name' => 'Tenant', 'email' => self::TENANT_EMAIL]);
         $this->addNotification($user);
         $this->addNotification($user, now());
 
@@ -69,7 +71,7 @@ class NotificationServiceTest extends TestCase
 
     public function test_mark_as_read(): void
     {
-        $user = User::create(['name' => 'Tenant', 'email' => 'tenant@example.com']);
+        $user = User::create(['name' => 'Tenant', 'email' => self::TENANT_EMAIL]);
         $notification = $this->addNotification($user);
 
         $result = (new NotificationService)->markAsRead($user, $notification);
@@ -81,7 +83,7 @@ class NotificationServiceTest extends TestCase
 
     public function test_mark_all_as_read(): void
     {
-        $user = User::create(['name' => 'Tenant', 'email' => 'tenant@example.com']);
+        $user = User::create(['name' => 'Tenant', 'email' => self::TENANT_EMAIL]);
         $this->addNotification($user);
         $this->addNotification($user);
 

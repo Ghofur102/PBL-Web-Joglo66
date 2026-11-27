@@ -31,7 +31,7 @@ Route::get('/hello', function () {
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:6,1');
 
 Route::prefix('admin')->middleware(['auth:sanctum', 'check.field.admin'])->group(function () {
-    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post(AuthController::LOGOUT_ROUTE, [AuthController::class, 'logout']);
 
     Route::get('/dashboard', [DashboardController::class, 'dashboard']);
     Route::get('/profile', [AuthController::class, 'profile']);
@@ -90,7 +90,7 @@ Route::prefix('treasurer')->middleware(['auth:sanctum'])->group(function () {
     Route::get('/gaji', [SalaryController::class, 'index']);
     Route::post('/gaji/update', [SalaryController::class, 'update']);
     Route::post('/gaji/sync', [SalaryController::class, 'sync']);
-    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post(AuthController::LOGOUT_ROUTE, [AuthController::class, 'logout']);
 });
 
 Route::prefix('owner')->middleware(['auth:sanctum'])->group(function () {
@@ -109,7 +109,7 @@ Route::prefix('owner')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/fields/{id}/update', [OwnerFieldController::class, 'update']);
 
     Route::get('/laporan-pdf/preview', [DownloadReportController::class, 'preview']);
-    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post(AuthController::LOGOUT_ROUTE, [AuthController::class, 'logout']);
 });
 
 Route::get('/laporan-bulanan', [ReportController::class, 'index'])->middleware('auth:sanctum');

@@ -20,6 +20,19 @@ use Tests\TestCase;
 class AdminFunctionalRequirementsTest extends TestCase
 {
     private const CONNECTION = 'mysql_joglo66_app';
+    private const DATE_20261016 = '2026-10-16';
+    private const DATE_20261015 = '2026-10-15';
+    private const TIME_1000 = '10:00';
+    private const TIME_1100 = '11:00';
+    private const TIME_100000 = '10:00:00';
+    private const TIME_110000 = '11:00:00';
+    private const LOGIN_PATH = '/api/login';
+    private const APPROVE_PATH = '/approve';
+    private const REJECT_PATH = '/reject';
+    private const RESCHEDULE_PATH = '/api/admin/reschedule-booking/';
+    private const CANCEL_PATH = '/api/admin/cancel-booking/';
+    private const REFUND_PATH = '/api/admin/refund-overpayment/';
+    private const CREATE_EXPENSE_PATH = '/api/admin/create-expense';
 
     protected function setUp(): void
     {
@@ -227,7 +240,7 @@ class AdminFunctionalRequirementsTest extends TestCase
                 'items' => [['fk_attribute_id' => $attributeId, 'quantity' => 2]],
                 'customer_name' => 'Tim Uji',
                 'duration_hours' => 2,
-                'transaction_date' => '2026-10-16',
+                'transaction_date' => self::DATE_20261016,
             ])
             ->assertCreated()
             ->assertJsonPath('data.total_price', 20000);
@@ -249,12 +262,12 @@ class AdminFunctionalRequirementsTest extends TestCase
         ]);
 
         $this->actingAs($worker, 'sanctum')
-            ->post('/api/admin/create-expense', [
+            ->post(self::CREATE_EXPENSE_PATH, [
                 'name' => 'Beli net',
                 'category' => 'Operasional',
                 'quantity' => 1,
                 'unit_price' => 150000,
-                'date' => '2026-10-16',
+                'date' => self::DATE_20261016,
                 'image' => UploadedFile::fake()->image('nota.png')->size(1024),
             ], ['Accept' => 'application/json'])
             ->assertCreated()
@@ -275,10 +288,10 @@ class AdminFunctionalRequirementsTest extends TestCase
         $detailId = $this->createBookingDetail();
 
         $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/reschedule-booking/'.$detailId, [
-                'new_play_date' => '2026-10-16',
-                'new_start_time' => '10:00',
-                'new_end_time' => '11:00',
+            ->postJson(self::RESCHEDULE_PATH.$detailId, [
+                'new_play_date' => self::DATE_20261016,
+                'new_start_time' => self::TIME_1000,
+                'new_end_time' => self::TIME_1100,
                 'reason' => 'Penyesuaian jadwal',
                 'new_price' => 100000,
                 'financial_action' => 'Settle_Later',
@@ -288,8 +301,8 @@ class AdminFunctionalRequirementsTest extends TestCase
 
         $this->assertDatabaseHas('booking_details', [
             'id' => $detailId,
-            'play_date' => '2026-10-16',
-            'start_play_time' => '10:00',
+            'play_date' => self::DATE_20261016,
+            'start_play_time' => self::TIME_1000,
         ], self::CONNECTION);
     }
 
@@ -302,7 +315,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         Notification::fake();
 
         $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/cancel-booking/'.$detailId, [
+            ->postJson(self::CANCEL_PATH.$detailId, [
                 'reason' => 'Permintaan admin',
                 'status_refund' => 'Full',
                 'refund_amount' => 100000,
@@ -326,7 +339,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         $this->createPaymentForDetail($detailId, PaymentType::FINAL_PAYMENT->value, 100000);
 
         $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/cancel-booking/'.$detailId, [
+            ->postJson(self::CANCEL_PATH.$detailId, [
                 'reason' => 'Pembatalan',
                 'status_refund' => 'Partial',
                 'refund_percent' => 50,
@@ -348,10 +361,10 @@ class AdminFunctionalRequirementsTest extends TestCase
         $this->createPaymentForDetail($detailId, PaymentType::FINAL_PAYMENT->value, 100000);
 
         $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/reschedule-booking/'.$detailId, [
-                'new_play_date' => '2026-10-16',
-                'new_start_time' => '10:00',
-                'new_end_time' => '11:00',
+            ->postJson(self::RESCHEDULE_PATH.$detailId, [
+                'new_play_date' => self::DATE_20261016,
+                'new_start_time' => self::TIME_1000,
+                'new_end_time' => self::TIME_1100,
                 'reason' => 'Slot lebih murah',
                 'new_price' => 70000,
                 'refund_percent' => 50,
@@ -373,10 +386,10 @@ class AdminFunctionalRequirementsTest extends TestCase
         $this->createPaymentForDetail($detailId, PaymentType::FINAL_PAYMENT->value, 100000);
 
         $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/reschedule-booking/'.$detailId, [
-                'new_play_date' => '2026-10-16',
-                'new_start_time' => '10:00',
-                'new_end_time' => '11:00',
+            ->postJson(self::RESCHEDULE_PATH.$detailId, [
+                'new_play_date' => self::DATE_20261016,
+                'new_start_time' => self::TIME_1000,
+                'new_end_time' => self::TIME_1100,
                 'reason' => 'Slot lebih mahal',
                 'new_price' => 130000,
                 'financial_action' => 'Settle_Later',
@@ -415,7 +428,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         ]);
 
         $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/refund-overpayment/'.$detailId)
+            ->postJson(self::REFUND_PATH.$detailId)
             ->assertOk();
 
         $this->assertDatabaseHas('payments', [
@@ -433,13 +446,13 @@ class AdminFunctionalRequirementsTest extends TestCase
         Notification::fake();
 
         $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/reschedule-booking/'.$detailId.'/approve')
+            ->postJson(self::RESCHEDULE_PATH.$detailId.self::APPROVE_PATH)
             ->assertOk()
             ->assertJsonPath('status', 'success');
 
         $this->assertDatabaseHas('booking_details', [
             'id' => $detailId,
-            'play_date' => '2026-10-16',
+            'play_date' => self::DATE_20261016,
             'status' => 'reschedule',
         ], self::CONNECTION);
         Notification::assertSentTo($tenant, GeneralBookingNotification::class);
@@ -454,7 +467,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         Notification::fake();
 
         $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/reschedule-booking/'.$detailId.'/reject', [
+            ->postJson(self::RESCHEDULE_PATH.$detailId.self::REJECT_PATH, [
                 'rejection_reason' => 'Jadwal tidak tersedia',
             ])
             ->assertOk();
@@ -479,7 +492,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         Notification::fake();
 
         $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/cancel-booking/'.$detailId.'/approve', [
+            ->postJson(self::CANCEL_PATH.$detailId.self::APPROVE_PATH, [
                 'status_refund' => 'Partial',
                 'refund_amount' => 50000,
             ])
@@ -500,7 +513,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         Notification::fake();
 
         $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/cancel-booking/'.$detailId.'/reject', [
+            ->postJson(self::CANCEL_PATH.$detailId.self::REJECT_PATH, [
                 'rejection_reason' => 'Jadwal tetap dipakai',
             ])
             ->assertOk();
@@ -542,7 +555,7 @@ class AdminFunctionalRequirementsTest extends TestCase
             'role' => 'admin',
         ]);
 
-        $login = $this->postJson('/api/login', [
+        $login = $this->postJson(self::LOGIN_PATH, [
             'email' => $admin->email,
             'password' => 'password',
         ])->assertOk()->assertJsonPath('success', true);
@@ -556,7 +569,7 @@ class AdminFunctionalRequirementsTest extends TestCase
 
     public function test_tc_adm_29_1_rejects_unknown_login_email_without_issuing_token(): void
     {
-        $this->postJson('/api/login', [
+        $this->postJson(self::LOGIN_PATH, [
             'email' => 'unknown@example.test',
             'password' => 'incorrect',
         ])
@@ -679,7 +692,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         ]);
 
         $response = $this->actingAs($worker, 'sanctum')
-            ->post('/api/admin/create-expense', $payload, ['Accept' => 'application/json']);
+            ->post(self::CREATE_EXPENSE_PATH, $payload, ['Accept' => 'application/json']);
         if ($caseId === 'TC-ADM-15.6' && $response->status() === 201) {
             $this->assertDatabaseMissing('expenses', ['name' => '<script>alert(1)</script>'], self::CONNECTION);
 
@@ -690,7 +703,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         if ($repeatWithEmptyAmount) {
             $payload['unit_price'] = '';
             $this->actingAs($worker, 'sanctum')
-                ->post('/api/admin/create-expense', $payload, ['Accept' => 'application/json'])
+                ->post(self::CREATE_EXPENSE_PATH, $payload, ['Accept' => 'application/json'])
                 ->assertUnprocessable();
         }
 
@@ -704,28 +717,28 @@ class AdminFunctionalRequirementsTest extends TestCase
         return [
             'TC-ADM-15.2' => [
                 'TC-ADM-15.2',
-                ['name' => 'Nota batas', 'category' => 'Operasional', 'quantity' => 1, 'unit_price' => 1000, 'date' => '2026-10-16', 'image' => UploadedFile::fake()->image('batas.jpg')->size(2048)],
+                ['name' => 'Nota batas', 'category' => 'Operasional', 'quantity' => 1, 'unit_price' => 1000, 'date' => self::DATE_20261016, 'image' => UploadedFile::fake()->image('batas.jpg')->size(2048)],
                 201,
             ],
             'TC-ADM-15.3' => [
                 'TC-ADM-15.3',
-                ['name' => 'Nota besar', 'category' => 'Operasional', 'quantity' => 1, 'unit_price' => 1000, 'date' => '2026-10-16', 'image' => UploadedFile::fake()->image('besar.jpg')->size(2049)],
+                ['name' => 'Nota besar', 'category' => 'Operasional', 'quantity' => 1, 'unit_price' => 1000, 'date' => self::DATE_20261016, 'image' => UploadedFile::fake()->image('besar.jpg')->size(2049)],
                 422,
             ],
             'TC-ADM-15.4' => [
                 'TC-ADM-15.4',
-                ['name' => 'Nota PDF', 'category' => 'Operasional', 'quantity' => 1, 'unit_price' => 1000, 'date' => '2026-10-16', 'image' => UploadedFile::fake()->create('nota.pdf', 10, 'application/pdf')],
+                ['name' => 'Nota PDF', 'category' => 'Operasional', 'quantity' => 1, 'unit_price' => 1000, 'date' => self::DATE_20261016, 'image' => UploadedFile::fake()->create('nota.pdf', 10, 'application/pdf')],
                 422,
             ],
             'TC-ADM-15.5' => [
                 'TC-ADM-15.5',
-                ['name' => 'Nominal negatif', 'category' => 'Operasional', 'quantity' => 1, 'unit_price' => -1000, 'date' => '2026-10-16'],
+                ['name' => 'Nominal negatif', 'category' => 'Operasional', 'quantity' => 1, 'unit_price' => -1000, 'date' => self::DATE_20261016],
                 422,
                 true,
             ],
             'TC-ADM-15.6' => [
                 'TC-ADM-15.6',
-                ['name' => '<script>alert(1)</script>', 'category' => 'Operasional', 'quantity' => 1, 'unit_price' => 1000, 'date' => '2026-10-16'],
+                ['name' => '<script>alert(1)</script>', 'category' => 'Operasional', 'quantity' => 1, 'unit_price' => 1000, 'date' => self::DATE_20261016],
                 422,
             ],
         ];
@@ -738,7 +751,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         $detailId = $this->createBookingDetail();
 
         if ($caseId === 'TC-ADM-17.2') {
-            $this->createBookingDetailAt('2026-10-16', '10:00:00', '11:00:00');
+            $this->createBookingDetailAt(self::DATE_20261016, self::TIME_100000, self::TIME_110000);
             $this->postReschedule($worker, $detailId)->assertStatus(409);
 
             return;
@@ -763,7 +776,7 @@ class AdminFunctionalRequirementsTest extends TestCase
             $this->postReschedule($worker, $detailId)->assertServerError();
             $this->assertDatabaseHas('booking_details', [
                 'id' => $detailId,
-                'play_date' => '2026-10-15',
+                'play_date' => self::DATE_20261015,
             ], self::CONNECTION);
             $this->assertDatabaseCount('booking_reschedules', 0, self::CONNECTION);
 
@@ -775,7 +788,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         $this->postReschedule($worker, $foreignDetail)->assertForbidden();
         $this->assertDatabaseHas('booking_details', [
             'id' => $foreignDetail,
-            'play_date' => '2026-10-15',
+            'play_date' => self::DATE_20261015,
         ], self::CONNECTION);
     }
 
@@ -814,7 +827,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         Notification::fake();
 
         $response = $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/cancel-booking/'.$detailId, [
+            ->postJson(self::CANCEL_PATH.$detailId, [
                 'reason' => 'Pengujian pembatalan',
                 'status_refund' => 'Partial',
                 'refund_amount' => 50000,
@@ -864,7 +877,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         $this->createPaymentForDetail($detailId, PaymentType::FINAL_PAYMENT->value, 100000);
 
         $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/cancel-booking/'.$detailId, [
+            ->postJson(self::CANCEL_PATH.$detailId, [
                 'reason' => 'Pembatalan uji',
                 'status_refund' => 'Partial',
                 'refund_percent' => $percentage,
@@ -907,10 +920,10 @@ class AdminFunctionalRequirementsTest extends TestCase
         $this->createPaymentForDetail($detailId, PaymentType::FINAL_PAYMENT->value, 100000);
 
         $response = $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/reschedule-booking/'.$detailId, [
-                'new_play_date' => '2026-10-16',
-                'new_start_time' => '10:00',
-                'new_end_time' => '11:00',
+            ->postJson(self::RESCHEDULE_PATH.$detailId, [
+                'new_play_date' => self::DATE_20261016,
+                'new_start_time' => self::TIME_1000,
+                'new_end_time' => self::TIME_1100,
                 'reason' => 'Uji selisih harga',
                 'new_price' => $newPrice,
                 'refund_percent' => $percentage,
@@ -998,7 +1011,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         }
 
         $firstResponse = $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/refund-overpayment/'.$detailId);
+            ->postJson(self::REFUND_PATH.$detailId);
         $firstResponse->assertStatus($foreignField ? 403 : 200);
 
         if ($foreignField) {
@@ -1015,7 +1028,7 @@ class AdminFunctionalRequirementsTest extends TestCase
             $this->assertSame(PaymentStatus::SUCCESS->value, $refunds->first()->status);
 
             $this->actingAs($worker, 'sanctum')
-                ->postJson('/api/admin/refund-overpayment/'.$detailId)
+                ->postJson(self::REFUND_PATH.$detailId)
                 ->assertStatus(400);
             $this->assertSame(
                 1,
@@ -1049,9 +1062,9 @@ class AdminFunctionalRequirementsTest extends TestCase
         Notification::fake();
 
         if ($caseId === 'TC-ADM-23.2') {
-            $this->createBookingDetailAt('2026-10-16', '10:00:00', '11:00:00');
+            $this->createBookingDetailAt(self::DATE_20261016, self::TIME_100000, self::TIME_110000);
             $this->actingAs($worker, 'sanctum')
-                ->postJson('/api/admin/reschedule-booking/'.$detailId.'/approve')
+                ->postJson(self::RESCHEDULE_PATH.$detailId.self::APPROVE_PATH)
                 ->assertStatus(409)
                 ->assertJsonPath('success', false);
             $this->assertUnchangedPendingReschedule($detailId, $rescheduleId);
@@ -1064,7 +1077,7 @@ class AdminFunctionalRequirementsTest extends TestCase
             $this->assertTrue($lock->get());
             try {
                 $this->actingAs($worker, 'sanctum')
-                    ->postJson('/api/admin/reschedule-booking/'.$detailId.'/approve')
+                    ->postJson(self::RESCHEDULE_PATH.$detailId.self::APPROVE_PATH)
                     ->assertStatus(409);
             } finally {
                 $lock->release();
@@ -1077,7 +1090,7 @@ class AdminFunctionalRequirementsTest extends TestCase
             DB::connection(self::CONNECTION)->table('booking_reschedules')
                 ->where('id', $rescheduleId)->update(['approval_status' => 'approved']);
             $this->actingAs($worker, 'sanctum')
-                ->postJson('/api/admin/reschedule-booking/'.$detailId.'/approve')
+                ->postJson(self::RESCHEDULE_PATH.$detailId.self::APPROVE_PATH)
                 ->assertStatus(409)
                 ->assertJsonPath('success', false);
             Notification::assertNothingSent();
@@ -1086,7 +1099,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         }
 
         $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/reschedule-booking/'.$detailId.'/approve')
+            ->postJson(self::RESCHEDULE_PATH.$detailId.self::APPROVE_PATH)
             ->assertForbidden();
     }
 
@@ -1117,7 +1130,7 @@ class AdminFunctionalRequirementsTest extends TestCase
             DB::connection(self::CONNECTION)->table('booking_reschedules')
                 ->where('id', $rescheduleId)->update(['approval_status' => 'approved']);
             $this->actingAs($worker, 'sanctum')
-                ->postJson('/api/admin/reschedule-booking/'.$detailId.'/reject', ['rejection_reason' => 'Terlambat'])
+                ->postJson(self::RESCHEDULE_PATH.$detailId.self::REJECT_PATH, ['rejection_reason' => 'Terlambat'])
                 ->assertStatus(409)
                 ->assertJsonPath('success', false);
             Notification::assertNothingSent();
@@ -1127,7 +1140,7 @@ class AdminFunctionalRequirementsTest extends TestCase
 
         if ($caseId === 'TC-ADM-24.3') {
             $this->actingAs($worker, 'sanctum')
-                ->postJson('/api/admin/reschedule-booking/'.$detailId.'/reject', ['rejection_reason' => 'Tidak dapat'])
+                ->postJson(self::RESCHEDULE_PATH.$detailId.self::REJECT_PATH, ['rejection_reason' => 'Tidak dapat'])
                 ->assertForbidden();
 
             return;
@@ -1135,7 +1148,7 @@ class AdminFunctionalRequirementsTest extends TestCase
 
         $reason = '<script>alert(1)</script>';
         $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/reschedule-booking/'.$detailId.'/reject', ['rejection_reason' => $reason])
+            ->postJson(self::RESCHEDULE_PATH.$detailId.self::REJECT_PATH, ['rejection_reason' => $reason])
             ->assertUnprocessable();
         $this->assertDatabaseMissing('booking_reschedules', [
             'id' => $rescheduleId,
@@ -1174,7 +1187,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         }
 
         $response = $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/cancel-booking/'.$detailId.'/approve', [
+            ->postJson(self::CANCEL_PATH.$detailId.self::APPROVE_PATH, [
                 'status_refund' => 'Partial',
                 'refund_percent' => 50,
                 'refund_amount' => $caseId === 'TC-ADM-25.2' ? 0 : 50000,
@@ -1234,7 +1247,7 @@ class AdminFunctionalRequirementsTest extends TestCase
             DB::connection(self::CONNECTION)->table('booking_cancelled')
                 ->where('id', $cancellationId)->update(['approval_status' => 'rejected']);
             $this->actingAs($worker, 'sanctum')
-                ->postJson('/api/admin/cancel-booking/'.$detailId.'/reject', ['rejection_reason' => 'Selesai'])
+                ->postJson(self::CANCEL_PATH.$detailId.self::REJECT_PATH, ['rejection_reason' => 'Selesai'])
                 ->assertStatus(409)
                 ->assertJsonPath('success', false);
             Notification::assertNothingSent();
@@ -1243,7 +1256,7 @@ class AdminFunctionalRequirementsTest extends TestCase
         }
         if ($caseId === 'TC-ADM-26.3') {
             $this->actingAs($worker, 'sanctum')
-                ->postJson('/api/admin/cancel-booking/'.$detailId.'/reject', ['rejection_reason' => 'Di luar field'])
+                ->postJson(self::CANCEL_PATH.$detailId.self::REJECT_PATH, ['rejection_reason' => 'Di luar field'])
                 ->assertForbidden();
 
             return;
@@ -1251,7 +1264,7 @@ class AdminFunctionalRequirementsTest extends TestCase
 
         $reason = '<script>alert(1)</script>';
         $this->actingAs($worker, 'sanctum')
-            ->postJson('/api/admin/cancel-booking/'.$detailId.'/reject', ['rejection_reason' => $reason])
+            ->postJson(self::CANCEL_PATH.$detailId.self::REJECT_PATH, ['rejection_reason' => $reason])
             ->assertUnprocessable();
         $this->assertDatabaseMissing('booking_cancelled', [
             'id' => $cancellationId,
@@ -1323,7 +1336,7 @@ class AdminFunctionalRequirementsTest extends TestCase
             'password' => 'password',
             'role' => 'admin',
         ]);
-        $login = $this->postJson('/api/login', ['email' => $admin->email, 'password' => 'password'])
+        $login = $this->postJson(self::LOGIN_PATH, ['email' => $admin->email, 'password' => 'password'])
             ->assertOk();
 
         $this->withToken($login->json('token'))
@@ -1347,7 +1360,7 @@ class AdminFunctionalRequirementsTest extends TestCase
             'status' => 'inactive',
         ]);
 
-        $this->postJson('/api/login', ['email' => $admin->email, 'password' => 'password'])
+        $this->postJson(self::LOGIN_PATH, ['email' => $admin->email, 'password' => 'password'])
             ->assertForbidden()
             ->assertJsonMissingPath('token');
     }
@@ -1361,7 +1374,7 @@ class AdminFunctionalRequirementsTest extends TestCase
             'role' => 'admin',
         ]);
 
-        $this->postJson('/api/login', ['email' => $admin->email, 'password' => 'incorrect'])
+        $this->postJson(self::LOGIN_PATH, ['email' => $admin->email, 'password' => 'incorrect'])
             ->assertUnauthorized()
             ->assertJsonPath('message', 'Email atau password salah.')
             ->assertJsonMissingPath('token');
@@ -1371,7 +1384,7 @@ class AdminFunctionalRequirementsTest extends TestCase
     {
         $tenant = $this->createTenant();
 
-        $this->postJson('/api/login', ['email' => $tenant->email, 'password' => 'password'])
+        $this->postJson(self::LOGIN_PATH, ['email' => $tenant->email, 'password' => 'password'])
             ->assertForbidden()
             ->assertJsonMissingPath('token');
     }
@@ -1386,11 +1399,11 @@ class AdminFunctionalRequirementsTest extends TestCase
         ]);
 
         for ($attempt = 0; $attempt < 6; $attempt++) {
-            $this->postJson('/api/login', ['email' => $admin->email, 'password' => 'incorrect'])
+            $this->postJson(self::LOGIN_PATH, ['email' => $admin->email, 'password' => 'incorrect'])
                 ->assertUnauthorized();
         }
 
-        $this->postJson('/api/login', ['email' => $admin->email, 'password' => 'password'])
+        $this->postJson(self::LOGIN_PATH, ['email' => $admin->email, 'password' => 'password'])
             ->assertStatus(429);
     }
 
@@ -1398,7 +1411,7 @@ class AdminFunctionalRequirementsTest extends TestCase
     {
         $this->assertDatabaseHas('booking_details', [
             'id' => $detailId,
-            'play_date' => '2026-10-15',
+            'play_date' => self::DATE_20261015,
         ], self::CONNECTION);
         $this->assertDatabaseHas('booking_reschedules', [
             'id' => $rescheduleId,
@@ -1468,9 +1481,9 @@ class AdminFunctionalRequirementsTest extends TestCase
 
         return DB::connection(self::CONNECTION)->table('booking_details')->insertGetId([
             'fk_booking_id' => $bookingId,
-            'play_date' => '2026-10-15',
+            'play_date' => self::DATE_20261015,
             'start_play_time' => '09:00:00',
-            'end_play_time' => '10:00:00',
+            'end_play_time' => self::TIME_100000,
             'price' => $price,
             'status' => $status,
         ]);
@@ -1492,10 +1505,10 @@ class AdminFunctionalRequirementsTest extends TestCase
 
     private function postReschedule(User $worker, int $detailId, int $newPrice = 100000)
     {
-        return $this->actingAs($worker, 'sanctum')->postJson('/api/admin/reschedule-booking/'.$detailId, [
-            'new_play_date' => '2026-10-16',
-            'new_start_time' => '10:00',
-            'new_end_time' => '11:00',
+        return $this->actingAs($worker, 'sanctum')->postJson(self::RESCHEDULE_PATH.$detailId, [
+            'new_play_date' => self::DATE_20261016,
+            'new_start_time' => self::TIME_1000,
+            'new_end_time' => self::TIME_1100,
             'reason' => 'Uji jadwal',
             'new_price' => $newPrice,
             'financial_action' => 'Settle_Later',
@@ -1506,10 +1519,10 @@ class AdminFunctionalRequirementsTest extends TestCase
     {
         return DB::connection(self::CONNECTION)->table('booking_reschedules')->insertGetId([
             'fk_booking_detail_id' => $detailId,
-            'old_date' => '2026-10-15',
-            'new_play_date' => '2026-10-16',
-            'new_start_play_time' => '10:00:00',
-            'new_end_play_time' => '11:00:00',
+            'old_date' => self::DATE_20261015,
+            'new_play_date' => self::DATE_20261016,
+            'new_start_play_time' => self::TIME_100000,
+            'new_end_play_time' => self::TIME_110000,
             'new_price' => 100000,
             'reason' => 'Permintaan penyewa',
             'status_refund' => 'none',
@@ -1539,8 +1552,8 @@ class AdminFunctionalRequirementsTest extends TestCase
             'category' => 'Operasional',
             'quantity' => 1,
             'unit_price' => $amount,
-            'expense_date' => '2026-10-15',
-            'generate_at' => '2026-10-15',
+            'expense_date' => self::DATE_20261015,
+            'generate_at' => self::DATE_20261015,
         ]);
     }
 
@@ -1573,7 +1586,7 @@ class AdminFunctionalRequirementsTest extends TestCase
             'items' => [['fk_attribute_id' => $attributeId, 'quantity' => $quantity]],
             'customer_name' => 'Tim Uji',
             'duration_hours' => 2,
-            'transaction_date' => '2026-10-16',
+            'transaction_date' => self::DATE_20261016,
         ]);
     }
 }

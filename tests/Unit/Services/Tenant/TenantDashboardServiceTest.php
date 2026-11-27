@@ -19,6 +19,10 @@ use Tests\TestCase;
 #[RunTestsInSeparateProcesses]
 class TenantDashboardServiceTest extends TestCase
 {
+    private const MAIN_FIELD = 'Main field';
+    private const TEAM_NAME = 'Joglo team';
+    private const NOW_20261025_120000 = '2026-10-25 12:00:00';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -71,7 +75,7 @@ class TenantDashboardServiceTest extends TestCase
     public function test_get_cached_fields(): void
     {
         Cache::flush();
-        Field::create(['name' => 'Main field']);
+        Field::create(['name' => self::MAIN_FIELD]);
 
         $service = new TenantDashboardService;
         $firstResult = $service->getCachedFields();
@@ -80,17 +84,17 @@ class TenantDashboardServiceTest extends TestCase
 
         $this->assertCount(1, $firstResult);
         $this->assertCount(1, $cachedResult);
-        $this->assertSame('Main field', $cachedResult->first()->name);
+        $this->assertSame(self::MAIN_FIELD, $cachedResult->first()->name);
     }
 
     public function test_get_nearest_bookings(): void
     {
         $user = User::create(['name' => 'Tenant', 'email' => 'tenant@example.com']);
-        $field = Field::create(['name' => 'Main field']);
+        $field = Field::create(['name' => self::MAIN_FIELD]);
         $booking = Booking::create([
             'fk_user_id' => $user->id,
             'fk_field_id' => $field->id,
-            'team_name' => 'Joglo team',
+            'team_name' => self::TEAM_NAME,
             'booking_date' => '2026-10-01',
         ]);
         BookingDetail::create([
@@ -102,10 +106,10 @@ class TenantDashboardServiceTest extends TestCase
             'status' => 'active',
         ]);
 
-        $nearest = (new TenantDashboardService)->getNearestBookings($field->id, Carbon::parse('2026-10-25 12:00:00'));
+        $nearest = (new TenantDashboardService)->getNearestBookings($field->id, Carbon::parse(self::NOW_20261025_120000));
 
         $this->assertCount(1, $nearest);
-        $this->assertSame('Joglo team', $nearest->first()['team_name']);
+        $this->assertSame(self::TEAM_NAME, $nearest->first()['team_name']);
         $this->assertSame('14:00 - 15:00', $nearest->first()['time']);
         $this->assertSame('Mulai dalam 1 hari lagi', $nearest->first()['status_text']);
     }
@@ -113,11 +117,11 @@ class TenantDashboardServiceTest extends TestCase
     public function test_get_user_bookings(): void
     {
         $user = User::create(['name' => 'Tenant', 'email' => 'tenant@example.com']);
-        $field = Field::create(['name' => 'Main field']);
+        $field = Field::create(['name' => self::MAIN_FIELD]);
         $booking = Booking::create([
             'fk_user_id' => $user->id,
             'fk_field_id' => $field->id,
-            'team_name' => 'Joglo team',
+            'team_name' => self::TEAM_NAME,
             'booking_date' => '2026-10-20',
         ]);
         BookingDetail::create([
@@ -132,7 +136,7 @@ class TenantDashboardServiceTest extends TestCase
         $bookings = (new TenantDashboardService)->getUserBookings($user->id, $field->id);
 
         $this->assertCount(1, $bookings);
-        $this->assertSame('Joglo team', $bookings->first()['team_name']);
+        $this->assertSame(self::TEAM_NAME, $bookings->first()['team_name']);
         $this->assertSame('08:30 - 10:00', $bookings->first()['time']);
         $this->assertSame('✓ Done', $bookings->first()['status_text']);
     }
@@ -144,11 +148,11 @@ class TenantDashboardServiceTest extends TestCase
 
         $this->assertSame(
             'Mulai dalam 2 jam lagi',
-            $method->invoke($service, Carbon::parse('2026-10-25 10:00:00'), Carbon::parse('2026-10-25 12:00:00'))
+            $method->invoke($service, Carbon::parse('2026-10-25 10:00:00'), Carbon::parse(self::NOW_20261025_120000))
         );
         $this->assertSame(
             'Sedang bermain / Lewat',
-            $method->invoke($service, Carbon::parse('2026-10-25 13:00:00'), Carbon::parse('2026-10-25 12:00:00'))
+            $method->invoke($service, Carbon::parse('2026-10-25 13:00:00'), Carbon::parse(self::NOW_20261025_120000))
         );
     }
 

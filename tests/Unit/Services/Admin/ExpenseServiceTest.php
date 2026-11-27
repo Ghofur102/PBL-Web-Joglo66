@@ -14,6 +14,8 @@ use Tests\TestCase;
 #[RunTestsInSeparateProcesses]
 class ExpenseServiceTest extends TestCase
 {
+    private const DATE_20260101 = '2026-01-01';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -57,8 +59,8 @@ class ExpenseServiceTest extends TestCase
             'category' => 'Maintenance',
             'quantity' => 2,
             'unit_price' => 100,
-            'expense_date' => '2026-01-01',
-            'generate_at' => '2026-01-01',
+            'expense_date' => self::DATE_20260101,
+            'generate_at' => self::DATE_20260101,
         ]);
         Expense::create([
             'fk_field_id' => 2,
@@ -89,8 +91,8 @@ class ExpenseServiceTest extends TestCase
                 'category' => $category,
                 'quantity' => 1,
                 'unit_price' => 100,
-                'expense_date' => '2026-01-01',
-                'generate_at' => '2026-01-01',
+                'expense_date' => self::DATE_20260101,
+                'generate_at' => self::DATE_20260101,
             ]);
         }
 
@@ -131,8 +133,8 @@ class ExpenseServiceTest extends TestCase
             'category' => 'Maintenance',
             'quantity' => 1,
             'unit_price' => 100,
-            'expense_date' => '2026-01-01',
-            'generate_at' => '2026-01-01',
+            'expense_date' => self::DATE_20260101,
+            'generate_at' => self::DATE_20260101,
         ]);
 
         $updated = (new ExpenseService)->updateExpense($expense->id, [
@@ -159,8 +161,8 @@ class ExpenseServiceTest extends TestCase
             'category' => 'Other',
             'quantity' => 1,
             'unit_price' => 50,
-            'expense_date' => '2026-01-01',
-            'generate_at' => '2026-01-01',
+            'expense_date' => self::DATE_20260101,
+            'generate_at' => self::DATE_20260101,
         ]);
 
         $service = new ExpenseService;
