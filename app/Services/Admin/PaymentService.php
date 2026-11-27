@@ -131,6 +131,8 @@ class PaymentService
                 throw new HttpException(400, 'Sesi ini sudah lunas sepenuhnya.');
             }
 
+            $expectedAmount = (int)($totalPrice - $netPaid);
+
             if ($payload['payment_type'] === PaymentType::DOWN_PAYMENT->value) {
                 $expectedAmount = (int)($totalPrice * 0.5);
 
@@ -143,8 +145,6 @@ class PaymentService
                 if ($hasDownPayment) {
                     throw new HttpException(400, 'Down Payment (DP) sudah dibayarkan sebelumnya.');
                 }
-            } else {
-                $expectedAmount = (int)($totalPrice - $netPaid);
             }
 
             if ((int)$payload['amount'] !== $expectedAmount) {
