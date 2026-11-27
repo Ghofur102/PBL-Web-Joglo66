@@ -12,94 +12,32 @@ use App\Services\FinancialReportService;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Tests\TestCase;
+use Tests\Unit\Services\Concerns\UsesIsolatedSqliteDatabase;
 
 #[RunTestsInSeparateProcesses]
 class FinancialReportServiceTest extends TestCase
 {
-    private string $testDatabasePath;
+    use UsesIsolatedSqliteDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
-
-        $databasePath = tempnam(sys_get_temp_dir(), 'joglo66_financial_test_');
-        if ($databasePath === false) {
-            throw new \RuntimeException('Unable to create the isolated test database.');
-        }
-        $this->testDatabasePath = $databasePath;
-
-        $sqlite = config('database.connections.sqlite');
-        $sqlite['database'] = $this->testDatabasePath;
-        $sqlite['url'] = null;
-        config([
-            'database.default' => 'mysql_joglo66_app',
-            'database.connections.sqlite' => $sqlite,
-            'database.connections.mysql_joglo66_app' => $sqlite,
-        ]);
-        DB::purge('sqlite');
-        DB::purge('mysql_joglo66_app');
-
-        $this->artisan('migrate:fresh', ['--database' => 'sqlite', '--force' => true])
-            ->assertExitCode(0);
+        $this->setUpIsolatedSqliteDatabase();
     }
 
     protected function tearDown(): void
     {
-        DB::disconnect('sqlite');
-        DB::disconnect('mysql_joglo66_app');
-        if (isset($this->testDatabasePath) && file_exists($this->testDatabasePath)) {
-            unlink($this->testDatabasePath);
-        }
-
+        $this->tearDownIsolatedSqliteDatabase();
         parent::tearDown();
     }
 
     public function test_get_monthly_report(): void
     {
         [$user, $field, $booking] = $this->createBooking();
-        Payment::create([
-            'fk_booking_id' => $booking->id,
-            'reference_id' => 'REPORT-DP',
-            'payment_type' => PaymentType::DOWN_PAYMENT->value,
-            'method' => 'cash',
-            'amount' => 100000,
-            'status' => PaymentStatus::SUCCESS->value,
-            'paid_at' => '2027-01-05 10:00:00',
-        ]);
-        Payment::create([
-            'fk_booking_id' => $booking->id,
-            'reference_id' => 'REPORT-REFUND',
-            'payment_type' => PaymentType::REFUND->value,
-            'method' => 'cash',
-            'amount' => 20000,
-            'status' => PaymentStatus::SUCCESS->value,
-            'paid_at' => '2027-01-06 10:00:00',
-        ]);
-        DB::table('booking_attributes')->insert([
-            'fk_booking_id' => $booking->id,
-            'fk_attribute_id' => $this->createAttribute($field->id),
-            'quantity' => 1,
-            'price' => 10000,
-            'total' => 10000,
-            'status' => 'dipinjam',
-            'customer_name' => 'Joglo FC',
-            'duration_hours' => 1,
-            'transaction_date' => '2027-01-12',
-            'created_at' => '2027-01-12 10:00:00',
-            'updated_at' => '2027-01-12 10:00:00',
-        ]);
-        DB::table('expenses')->insert([
-            'fk_field_id' => $field->id,
-            'fk_user_id' => $user->id,
-            'name' => 'Cleaning',
-            'category' => 'operational',
-            'quantity' => 3,
-            'unit_price' => 5000,
-            'expense_date' => '2027-01-20',
-            'generate_at' => '2027-01-20',
-            'created_at' => '2027-01-20 10:00:00',
-            'updated_at' => '2027-01-20 10:00:00',
-        ]);
+        $this->createSuccessfulPayment($booking, 'REPORT-DP', PaymentType::DOWN_PAYMENT->value, 100000, '2027-01-05');
+        $this->createSuccessfulPayment($booking, 'REPORT-REFUND', PaymentType::REFUND->value, 20000, '2027-01-06');
+        $this->createBookingAttribute($booking, $field, 10000, '2027-01-12');
+        $this->createExpense($field, $user->id, 3, 5000);
 
         $report = app(FinancialReportService::class)->getMonthlyReport(1, 2027);
 
@@ -117,49 +55,10 @@ class FinancialReportServiceTest extends TestCase
     public function test_build_transaction_list(): void
     {
         [, $field, $booking] = $this->createBooking();
-        Payment::create([
-            'fk_booking_id' => $booking->id,
-            'reference_id' => 'RENTAL-DP',
-            'payment_type' => PaymentType::DOWN_PAYMENT->value,
-            'method' => 'cash',
-            'amount' => 80000,
-            'status' => PaymentStatus::SUCCESS->value,
-            'paid_at' => '2027-01-05 10:00:00',
-        ]);
-        Payment::create([
-            'fk_booking_id' => $booking->id,
-            'reference_id' => 'RENTAL-REFUND',
-            'payment_type' => PaymentType::REFUND->value,
-            'method' => 'cash',
-            'amount' => 5000,
-            'status' => PaymentStatus::SUCCESS->value,
-            'paid_at' => '2027-01-06 10:00:00',
-        ]);
-        DB::table('booking_attributes')->insert([
-            'fk_booking_id' => $booking->id,
-            'fk_attribute_id' => $this->createAttribute($field->id),
-            'quantity' => 1,
-            'price' => 20000,
-            'total' => 20000,
-            'status' => 'dipinjam',
-            'customer_name' => 'Joglo FC',
-            'duration_hours' => 1,
-            'transaction_date' => '2027-01-12',
-            'created_at' => '2027-01-12 10:00:00',
-            'updated_at' => '2027-01-12 10:00:00',
-        ]);
-        DB::table('expenses')->insert([
-            'fk_field_id' => $field->id,
-            'fk_user_id' => $booking->fk_user_id,
-            'name' => 'Cleaning',
-            'category' => 'operational',
-            'quantity' => 1,
-            'unit_price' => 10000,
-            'expense_date' => '2027-01-20',
-            'generate_at' => '2027-01-20',
-            'created_at' => '2027-01-20 10:00:00',
-            'updated_at' => '2027-01-20 10:00:00',
-        ]);
+        $this->createSuccessfulPayment($booking, 'RENTAL-DP', PaymentType::DOWN_PAYMENT->value, 80000, '2027-01-05');
+        $this->createSuccessfulPayment($booking, 'RENTAL-REFUND', PaymentType::REFUND->value, 5000, '2027-01-06');
+        $this->createBookingAttribute($booking, $field, 20000, '2027-01-12');
+        $this->createExpense($field, $booking->fk_user_id, 1, 10000);
 
         $report = app(FinancialReportService::class)->getMonthlyReport(1, 2027, ['report_type' => 'rental']);
 
@@ -205,6 +104,57 @@ class FinancialReportServiceTest extends TestCase
             'status' => 'active',
             'created_at' => now(),
             'updated_at' => now(),
+        ]);
+    }
+
+    private function createSuccessfulPayment(
+        Booking $booking,
+        string $referenceId,
+        string $paymentType,
+        int $amount,
+        string $paidDate
+    ): void {
+        Payment::create([
+            'fk_booking_id' => $booking->id,
+            'reference_id' => $referenceId,
+            'payment_type' => $paymentType,
+            'method' => 'cash',
+            'amount' => $amount,
+            'status' => PaymentStatus::SUCCESS->value,
+            'paid_at' => "{$paidDate} 10:00:00",
+        ]);
+    }
+
+    private function createBookingAttribute(Booking $booking, Field $field, int $price, string $date): void
+    {
+        DB::table('booking_attributes')->insert([
+            'fk_booking_id' => $booking->id,
+            'fk_attribute_id' => $this->createAttribute($field->id),
+            'quantity' => 1,
+            'price' => $price,
+            'total' => $price,
+            'status' => 'dipinjam',
+            'customer_name' => 'Joglo FC',
+            'duration_hours' => 1,
+            'transaction_date' => $date,
+            'created_at' => "{$date} 10:00:00",
+            'updated_at' => "{$date} 10:00:00",
+        ]);
+    }
+
+    private function createExpense(Field $field, int $userId, int $quantity, int $unitPrice): void
+    {
+        DB::table('expenses')->insert([
+            'fk_field_id' => $field->id,
+            'fk_user_id' => $userId,
+            'name' => 'Cleaning',
+            'category' => 'operational',
+            'quantity' => $quantity,
+            'unit_price' => $unitPrice,
+            'expense_date' => '2027-01-20',
+            'generate_at' => '2027-01-20',
+            'created_at' => '2027-01-20 10:00:00',
+            'updated_at' => '2027-01-20 10:00:00',
         ]);
     }
 }

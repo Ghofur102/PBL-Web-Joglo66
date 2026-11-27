@@ -54,7 +54,7 @@ class DuitkuServiceTest extends TestCase
         Http::assertSent(function ($request) use ($booking): bool {
             $payload = $request->data();
             $expectedOrderId = $payload['merchantOrderId'];
-            $expectedSignature = md5('D123'.$expectedOrderId.'100001key-abc');
+            $expectedSignature = md5('D123'.$expectedOrderId.'100001key-abc'); // NOSONAR: Mirrors the official SDK's MD5 signature for this legacy integration.
 
             return $request->url() === 'https://api-sandbox.duitku.com/api/merchant/createInvoice'
                 && $payload['merchantCode'] === 'D123'
